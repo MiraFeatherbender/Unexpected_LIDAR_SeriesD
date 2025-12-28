@@ -1,6 +1,6 @@
 #include "io_rgb.h"
 #include "dispatcher.h"
-#include "src/UMSeriesD.hpp" 
+#include "UMSeriesD_idf.h"   // <-- use the C header now
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -12,9 +12,6 @@
 
 // Queue for incoming RGB commands
 static QueueHandle_t rgb_cmd_queue = NULL;
-
-// RGB hardware instance
-static UMSeriesD rgb;
 
 // Forward declaration
 static void io_rgb_task(void *arg);
@@ -34,10 +31,10 @@ void io_rgb_init(void)
     // Register with dispatcher
     dispatcher_register_handler(TARGET_RGB, io_rgb_dispatcher_handler);
 
-    // Initialize RGB hardware
-    rgb.begin();
-    rgb.setPixelBrightness(255);   // steady brightness for now
-    rgb.setPixelColor(0, 0, 0);    // LED off initially
+    // Initialize RGB hardware (C API)
+    ums3_begin();
+    ums3_set_pixel_brightness(255);   // steady brightness for now
+    ums3_set_pixel_color(0, 0, 0);    // LED off initially
 
     // Start RGB task
     xTaskCreate(io_rgb_task,
@@ -56,12 +53,14 @@ static void io_rgb_task(void *arg)
 
         // Check for incoming commands (non-blocking)
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
+
             // For now: interpret only "set solid color"
             if (msg.data[0] == 0x01 && msg.message_len >= 4) {
                 uint8_t r = msg.data[1];
                 uint8_t g = msg.data[2];
                 uint8_t b = msg.data[3];
-                rgb.setPixelColor(r, g, b);
+
+                ums3_set_pixel_color(r, g, b);
             }
         }
 

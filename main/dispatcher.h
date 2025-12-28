@@ -31,19 +31,11 @@ typedef struct {
 
 typedef void (*dispatcher_handler_t)(const dispatcher_msg_t *msg);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 void dispatcher_init(void);
 void dispatcher_send(const dispatcher_msg_t *msg);
 void dispatcher_send_from_isr(const dispatcher_msg_t *msg,
                               BaseType_t *hp_task_woken);
 void dispatcher_register_handler(dispatch_target_t target,
                                  dispatcher_handler_t handler);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // DISPATCHER_H
