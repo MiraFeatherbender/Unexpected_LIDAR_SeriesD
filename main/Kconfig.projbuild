@@ -1,0 +1,103 @@
+menu "UM Series[D] Board Configuration"
+
+    choice
+        prompt "Select UM Series[D] board"
+        default UM_BOARD_PROS3
+        config UM_BOARD_FEATHERS3
+            bool "FeatherS3"
+        config UM_BOARD_PROS3
+            bool "ProS3"
+        config UM_BOARD_TINYS3
+            bool "TinyS3"
+        config UM_BOARD_EDGES3D
+            bool "EdgeS3D"
+    endchoice
+
+    config UM_LDO2_PIN
+        int
+        default 17 if UM_BOARD_PROS3
+        default 39 if UM_BOARD_FEATHERS3
+
+    config UM_RGB_PWR_PIN
+        int
+        default UM_LDO2_PIN if UM_BOARD_PROS3
+        default UM_LDO2_PIN if UM_BOARD_FEATHERS3
+        default 17 if UM_BOARD_TINYS3
+
+    config UM_RGB_DATA_PIN
+        int
+        default 18 if UM_BOARD_PROS3
+        default 40 if UM_BOARD_FEATHERS3
+        default 18 if UM_BOARD_TINYS3
+
+    config UM_I2C_SDA_PIN
+        int
+        default 8 if UM_BOARD_PROS3
+        default 8 if UM_BOARD_FEATHERS3
+        default 8 if UM_BOARD_TINYS3
+        default 8 if UM_BOARD_EDGES3D
+
+    config UM_I2C_SCL_PIN
+        int
+        default 9 if UM_BOARD_PROS3
+        default 9 if UM_BOARD_FEATHERS3
+        default 9 if UM_BOARD_TINYS3
+        default 9 if UM_BOARD_EDGES3D
+
+    config UM_VBUS_SENSE_PIN
+        int
+        default 33 if UM_BOARD_PROS3
+        default 34 if UM_BOARD_FEATHERS3
+        default 33 if UM_BOARD_TINYS3
+
+    config UM_LED_BUILTIN_PIN
+        int
+        default 13 if UM_BOARD_FEATHERS3
+
+endmenu
+
+menu "Echo Example Configuration"
+
+    orsource "$IDF_PATH/examples/common_components/env_caps/$IDF_TARGET/Kconfig.env_caps"
+
+    config EXAMPLE_UART_PORT_NUM
+        int "UART port number"
+        range 0 2 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32S3
+        default 2 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32S3
+        range 0 1
+        default 1
+        help
+            UART communication port number for the example.
+            See UART documentation for available port numbers.
+
+    config EXAMPLE_UART_BAUD_RATE
+        int "UART communication speed"
+        range 1200 115200
+        default 115200
+        help
+            UART communication speed for Modbus example.
+
+    config EXAMPLE_UART_RXD
+        int "UART RXD pin number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_IN_RANGE_MAX
+        default 5
+        help
+            GPIO number for UART RX pin. See UART documentation for more information
+            about available pin numbers for UART.
+
+    config EXAMPLE_UART_TXD
+        int "UART TXD pin number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 4
+        help
+            GPIO number for UART TX pin. See UART documentation for more information
+            about available pin numbers for UART.
+
+    config EXAMPLE_TASK_STACK_SIZE
+        int "UART echo example task stack size"
+        range 1024 16384
+        default 3072
+        help
+            Defines stack size for UART echo example. Insufficient stack size can cause crash.
+
+endmenu

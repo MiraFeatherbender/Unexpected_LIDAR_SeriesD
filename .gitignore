@@ -1,0 +1,47 @@
+# ESP-IDF build output
+build/
+
+# ESP-IDF configuration files (regenerate as needed)
+sdkconfig
+sdkconfig.old
+sdkconfig.*.bak
+
+# Compiled object files and binaries
+*.o
+*.d
+*.a
+*.elf
+*.bin
+*.map
+*.hex
+*.log
+
+# CMake and Ninja files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+*.ninja
+.ninja_deps
+.ninja_log
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VSCode settings (optional, if you want to keep your workspace private)
+.vscode/
+.defcontainer/
+.examples/
+.references/
+
+# ESP-IDF Python environment (optional)
+.venv/
+.env/
+
+# Miscellaneous
+*.orig
+*.swp
+*~
+external/
