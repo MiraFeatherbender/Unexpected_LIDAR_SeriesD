@@ -32,7 +32,6 @@ void io_rgb_init(void)
     dispatcher_register_handler(TARGET_RGB, io_rgb_dispatcher_handler);
 
     // Initialize RGB hardware (C API)
-    ums3_begin();
     ums3_set_pixel_brightness(255);   // steady brightness for now
     ums3_set_pixel_color(0, 0, 0);    // LED off initially
 
