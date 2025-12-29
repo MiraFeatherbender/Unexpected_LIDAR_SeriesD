@@ -96,7 +96,7 @@ static void io_battery_task(void *arg)
         rgb_msg.data[1] = r;
         rgb_msg.data[2] = g;
         rgb_msg.data[3] = b;
-        rgb_msg.data[4] = 20;               // brightness (0–255)
+        rgb_msg.data[4] = 25;               // brightness (0–255)
         rgb_msg.message_len = 5;
 
         dispatcher_send(&rgb_msg);
