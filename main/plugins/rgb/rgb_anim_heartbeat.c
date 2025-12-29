@@ -4,6 +4,25 @@
 static uint32_t hb_color = 0;
 static uint8_t hb_brightness = 255;
 static uint16_t hb_phase = 0;
+static uint8_t hb_speed = 4;   // default phase increment
+
+// Prerecorded heartbeat waveform (0–255)
+static const uint8_t hb_waveform[256] = {48, 47, 45, 45, 45, 46, 48, 49, 49, 47, 45, 43, 43, 43, 44, 44, 
+                                         44, 43, 41, 41, 40, 42, 44, 44, 44, 44, 42, 42, 42, 43, 45, 44, 
+                                         43, 40, 36, 31, 28, 27, 26, 20, 12, 5, 3, 13, 36, 72, 115, 164, 
+                                         210, 242, 255, 246, 218, 177, 128, 80, 41, 15, 2, 0, 2, 8, 16, 
+                                         21, 25, 28, 29, 31, 33, 34, 36, 36, 35, 34, 33, 33, 33, 35, 36, 
+                                         35, 35, 35, 34, 34, 35, 36, 38, 38, 38, 37, 36, 35, 36, 36, 38, 
+                                         37, 37, 36, 35, 35, 35, 36, 38, 37, 37, 36, 34, 34, 34, 36, 38, 
+                                         38, 38, 37, 35, 35, 36, 37, 39, 39, 39, 39, 38, 38, 39, 41, 43, 
+                                         44, 44, 44, 43, 44, 45, 46, 47, 47, 47, 46, 45, 45, 45, 46, 48, 
+                                         47, 46, 44, 42, 41, 41, 42, 43, 43, 42, 41, 40, 40, 41, 42, 44, 
+                                         43, 43, 42, 40, 40, 41, 42, 43, 43, 42, 41, 39, 39, 40, 41, 43, 
+                                         43, 43, 42, 40, 40, 40, 42, 43, 43, 42, 41, 40, 40, 40, 41, 42, 
+                                         42, 42, 41, 41, 40, 41, 42, 43, 43, 42, 41, 39, 39, 40, 42, 43, 
+                                         43, 42, 41, 40, 40, 40, 42, 43, 43, 42, 42, 41, 41, 42, 43, 44, 
+                                         43, 42, 41, 40, 40, 41, 42, 43, 43, 42, 41, 41, 41, 43, 44, 46, 
+                                         46, 46, 45, 45, 45, 46, 47, 49, 49, 50, 50, 50, 50, 50, 51, 51, 50};
 
 static void heartbeat_begin(void)
 {
@@ -12,9 +31,8 @@ static void heartbeat_begin(void)
 
 static void heartbeat_step(void)
 {
-    // Temporary: simple triangular pulse
-    uint8_t intensity = (hb_phase < 128) ? hb_phase : (255 - hb_phase);
-    hb_phase = (hb_phase + 4) & 0xFF;
+    uint8_t intensity = hb_waveform[hb_phase];
+    hb_phase = (hb_phase + hb_speed) & 0xFF;
 
     // Scale intensity by peak brightness (0–255)
     uint16_t scaled = (intensity * hb_brightness) >> 8;

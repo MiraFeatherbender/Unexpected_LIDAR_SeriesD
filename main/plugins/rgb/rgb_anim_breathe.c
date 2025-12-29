@@ -4,6 +4,7 @@
 static uint32_t hb_color = 0;
 static uint8_t hb_brightness = 255;
 static uint16_t hb_phase = 0;
+static uint8_t hb_speed = 3;   // default phase increment
 
 static void breathe_begin(void)
 {
@@ -14,7 +15,7 @@ static void breathe_step(void)
 {
     // Temporary: simple triangular pulse
     uint8_t intensity = (hb_phase < 128) ? hb_phase : (255 - hb_phase);
-    hb_phase = (hb_phase + 4) & 0xFF;
+    hb_phase = (hb_phase + hb_speed) & 0xFF;
 
     // Scale intensity by peak brightness (0–255)
     uint16_t scaled = (intensity * hb_brightness) >> 8;

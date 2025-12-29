@@ -92,11 +92,11 @@ static void io_battery_task(void *arg)
         rgb_msg.target = TARGET_RGB;
         rgb_msg.source = SOURCE_UNDEFINED;
 
-        rgb_msg.data[0] = RGB_PLUGIN_BREATHE;  // RGB_CMD_SET_COLOR (your existing opcode)
+        rgb_msg.data[0] = RGB_PLUGIN_HEARTBEAT;  // RGB_CMD_SET_COLOR (your existing opcode)
         rgb_msg.data[1] = r;
         rgb_msg.data[2] = g;
         rgb_msg.data[3] = b;
-        rgb_msg.data[4] = 100;               // brightness (0–255)
+        rgb_msg.data[4] = 20;               // brightness (0–255)
         rgb_msg.message_len = 5;
 
         dispatcher_send(&rgb_msg);
