@@ -11,7 +11,8 @@ typedef enum {
     RGB_PLUGIN_SOLID,
     RGB_PLUGIN_FIRE,
     RGB_PLUGIN_HEARTBEAT,
-
+    RGB_PLUGIN_BREATHE,
+    
     RGB_PLUGIN_MAX   // <-- always last, auto-sizes registry
 } rgb_plugin_id_t;
 

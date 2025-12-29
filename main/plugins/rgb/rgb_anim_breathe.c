@@ -5,12 +5,12 @@ static uint32_t hb_color = 0;
 static uint8_t hb_brightness = 255;
 static uint16_t hb_phase = 0;
 
-static void heartbeat_begin(void)
+static void breathe_begin(void)
 {
     hb_phase = 0;
 }
 
-static void heartbeat_step(void)
+static void breathe_step(void)
 {
     // Temporary: simple triangular pulse
     uint8_t intensity = (hb_phase < 128) ? hb_phase : (255 - hb_phase);
@@ -27,24 +27,24 @@ static void heartbeat_step(void)
     ums3_set_pixel_color(r, g, b);
 }
 
-static void heartbeat_set_color(uint32_t rgb)
+static void breathe_set_color(uint32_t rgb)
 {
     hb_color = rgb;
 }
 
-static void heartbeat_set_brightness(uint8_t b)
+static void breathe_set_brightness(uint8_t b)
 {
     hb_brightness = b;
 }
 
-static const rgb_anim_t heartbeat_plugin = {
-    .begin = heartbeat_begin,
-    .step = heartbeat_step,
-    .set_color = heartbeat_set_color,
-    .set_brightness = heartbeat_set_brightness,
+static const rgb_anim_t breathe_plugin = {
+    .begin = breathe_begin,
+    .step = breathe_step,
+    .set_color = breathe_set_color,
+    .set_brightness = breathe_set_brightness,
 };
 
-void rgb_anim_heartbeat_init(void)
+void rgb_anim_breathe_init(void)
 {
-    io_rgb_register_plugin(RGB_PLUGIN_HEARTBEAT, &heartbeat_plugin);
+    io_rgb_register_plugin(RGB_PLUGIN_BREATHE, &breathe_plugin);
 }
