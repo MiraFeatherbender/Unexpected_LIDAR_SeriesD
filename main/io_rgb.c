@@ -1,6 +1,7 @@
 #include "io_rgb.h"
 #include "dispatcher.h"
-#include "UMSeriesD_idf.h"   // <-- use the C header now
+#include "UMSeriesD_idf.h"
+#include "rgb_anim.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -12,6 +13,21 @@
 
 // Queue for incoming RGB commands
 static QueueHandle_t rgb_cmd_queue = NULL;
+
+// Plugin registry (dispatcher‑style)
+static const rgb_anim_t *rgb_plugins[RGB_PLUGIN_MAX] = {0};
+
+// Active plugin + current parameters
+static const rgb_anim_t *active_anim = NULL;
+static uint32_t current_color = 0;
+static uint8_t current_brightness = 255;
+
+// Registration API (mirrors dispatcher_register_handler)
+void io_rgb_register_plugin(rgb_plugin_id_t id, const rgb_anim_t *plugin)
+{
+    if (id < RGB_PLUGIN_MAX)
+        rgb_plugins[id] = plugin;
+}
 
 // Forward declaration
 static void io_rgb_task(void *arg);
@@ -31,9 +47,9 @@ void io_rgb_init(void)
     // Register with dispatcher
     dispatcher_register_handler(TARGET_RGB, io_rgb_dispatcher_handler);
 
-    // Initialize RGB hardware (C API)
-    ums3_set_pixel_brightness(255);   // steady brightness for now
-    ums3_set_pixel_color(0, 0, 0);    // LED off initially
+    // Initialize RGB hardware
+    ums3_set_pixel_brightness(current_brightness);
+    ums3_set_pixel_color(0, 0, 0);
 
     // Start RGB task
     xTaskCreate(io_rgb_task,
@@ -50,20 +66,40 @@ static void io_rgb_task(void *arg)
 
     while (1) {
 
-        // Check for incoming commands (non-blocking)
+        // Handle incoming unified RGB command
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
 
-            // For now: interpret only "set solid color"
-            if (msg.data[0] == 0x01 && msg.message_len >= 4) {
+            if (msg.message_len >= 5) {
+
+                uint8_t plugin_id = msg.data[0];
                 uint8_t r = msg.data[1];
                 uint8_t g = msg.data[2];
                 uint8_t b = msg.data[3];
+                uint8_t brightness = msg.data[4];
 
-                ums3_set_pixel_color(r, g, b);
+                current_color = ums3_color(r, g, b);
+                current_brightness = brightness;
+
+                // Select plugin
+                active_anim = rgb_plugins[plugin_id];
+
+                if (active_anim) {
+                    if (active_anim->begin)
+                        active_anim->begin();
+
+                    if (active_anim->set_color)
+                        active_anim->set_color(current_color);
+
+                    if (active_anim->set_brightness)
+                        active_anim->set_brightness(current_brightness);
+                }
             }
         }
 
-        // No animation yet — steady color only
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // Run active animation
+        if (active_anim && active_anim->step)
+            active_anim->step();
+
+        vTaskDelay(pdMS_TO_TICKS(33)); // ~30 FPS
     }
 }

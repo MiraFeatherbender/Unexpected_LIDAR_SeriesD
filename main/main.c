@@ -4,6 +4,8 @@
 #include "io_uart0.h"
 #include "io_rgb.h"
 #include "io_battery.h"
+#include "rgb_anim.h"
+#include "rgb_anim_all.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -17,6 +19,7 @@ void app_main(void)
     io_usb_init();
     io_uart_init();
     io_rgb_init();
+    rgb_anim_init_all();
     io_battery_init();
     starting_color_test();
 
@@ -28,14 +31,18 @@ void app_main(void)
 
 void starting_color_test()
 {
-    dispatcher_msg_t msg;
+    dispatcher_msg_t msg = {0};
+
     msg.source = SOURCE_UNDEFINED;
     msg.target = TARGET_RGB;
-    msg.message_len = 4;
-    msg.data[0] = 0x01;  // Command: set solid color
-    msg.data[1] = 50;   // Red
-    msg.data[2] = 50;   // Green
-    msg.data[3] = 50;   // Blue
+
+    msg.data[0] = RGB_PLUGIN_SOLID;  // plugin_id
+    msg.data[1] = 255;                // R
+    msg.data[2] = 255;                // G
+    msg.data[3] = 255;                // B
+    msg.data[4] = 30;               // brightness (0–255)
+
+    msg.message_len = 5;
 
     dispatcher_send(&msg);
 }
