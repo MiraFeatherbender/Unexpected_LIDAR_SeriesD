@@ -1,21 +1,35 @@
+# Automatically collect all animation source files
+file(GLOB RGB_ANIMATION_SOURCES "plugins/rgb/*.c")
+
 idf_component_register(
-    SRCS 
+    SRCS
         "main.c"
         "dispatcher.c"
-        "io_usb.c"
-        "io_uart0.c"
-        "io_rgb.c"
-        "io_battery.c"
-        "rgb_anim_all.c"
-        "rgb_anim_fire.c"
-        "rgb_anim_heartbeat.c"
-        "rgb_anim_off.c"
-        "rgb_anim_solid.c"
+
+        # Core plugin sources
+        "plugins/io_usb.c"
+        "plugins/io_uart0.c"
+        "plugins/io_rgb.c"
+        "plugins/io_battery.c"
+
+        # Animation sources (auto-discovered)
+        ${RGB_ANIMATION_SOURCES}
+
+        # Library sources
         "src/UMSeriesD_idf.c"
-        "src/UMSeriesD.cpp"
-    REQUIRES esp_driver_uart esp_driver_gpio esp_adc led_strip esp_driver_i2c
-    INCLUDE_DIRS 
-        "src"
+
+    REQUIRES
+        esp_driver_uart
+        esp_driver_gpio
+        esp_adc
+        led_strip
+        esp_driver_i2c
+
+    INCLUDE_DIRS
+        "."              # main/
+        "plugins"        # io_*.h
+        "plugins/rgb"    # rgb_anim*.h
+        "src"            # UMSeriesD_idf.h
 )
 
 # Enable floating point support in printf/scanf

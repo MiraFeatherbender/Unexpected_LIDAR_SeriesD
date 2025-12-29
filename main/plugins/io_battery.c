@@ -1,5 +1,6 @@
 #include "io_battery.h"
 #include "dispatcher.h"
+#include "rgb_anim.h"
 #include "UMSeriesD_idf.h"
 
 #include "freertos/FreeRTOS.h"
@@ -91,11 +92,12 @@ static void io_battery_task(void *arg)
         rgb_msg.target = TARGET_RGB;
         rgb_msg.source = SOURCE_UNDEFINED;
 
-        rgb_msg.data[0] = 0x01;  // RGB_CMD_SET_COLOR (your existing opcode)
+        rgb_msg.data[0] = RGB_PLUGIN_SOLID;  // RGB_CMD_SET_COLOR (your existing opcode)
         rgb_msg.data[1] = r;
         rgb_msg.data[2] = g;
         rgb_msg.data[3] = b;
-        rgb_msg.message_len = 4;
+        rgb_msg.data[4] = 100;               // brightness (0–255)
+        rgb_msg.message_len = 5;
 
         dispatcher_send(&rgb_msg);
 
