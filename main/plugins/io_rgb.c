@@ -22,6 +22,12 @@ static const rgb_anim_t *active_anim = NULL;
 static uint32_t current_color = 0;
 static uint8_t current_brightness = 255;
 
+// Track last command to avoid resetting animation unnecessarily
+static uint8_t last_plugin_id = RGB_PLUGIN_MAX; // invalid sentinel
+static uint32_t last_color = 0;
+static uint8_t last_brightness = 255;
+static bool has_last = false;
+
 // Registration API (mirrors dispatcher_register_handler)
 void io_rgb_register_plugin(rgb_plugin_id_t id, const rgb_anim_t *plugin)
 {
@@ -77,22 +83,41 @@ static void io_rgb_task(void *arg)
                 uint8_t b = msg.data[3];
                 uint8_t brightness = msg.data[4];
 
-                current_color = ums3_color(r, g, b);
-                current_brightness = brightness;
+                uint32_t new_color = ums3_color(r, g, b);
+                uint8_t new_brightness = brightness;
+
+                bool plugin_changed = !has_last || (plugin_id != last_plugin_id);
+                bool params_changed =
+                    !has_last ||
+                    (new_color != last_color) ||
+                    (new_brightness != last_brightness);
 
                 // Select plugin
                 active_anim = rgb_plugins[plugin_id];
 
                 if (active_anim) {
-                    if (active_anim->begin)
+
+                    // Only reset animation when plugin changes
+                    if (plugin_changed && active_anim->begin)
                         active_anim->begin();
 
-                    if (active_anim->set_color)
-                        active_anim->set_color(current_color);
+                    // Always push updated parameters when they change
+                    if (params_changed) {
+                        if (active_anim->set_color)
+                            active_anim->set_color(new_color);
 
-                    if (active_anim->set_brightness)
-                        active_anim->set_brightness(current_brightness);
+                        if (active_anim->set_brightness)
+                            active_anim->set_brightness(new_brightness);
+                    }
                 }
+
+                // Commit new state
+                current_color = new_color;
+                current_brightness = new_brightness;
+                last_plugin_id = plugin_id;
+                last_color = new_color;
+                last_brightness = new_brightness;
+                has_last = true;
             }
         }
 

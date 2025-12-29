@@ -92,7 +92,7 @@ static void io_battery_task(void *arg)
         rgb_msg.target = TARGET_RGB;
         rgb_msg.source = SOURCE_UNDEFINED;
 
-        rgb_msg.data[0] = RGB_PLUGIN_SOLID;  // RGB_CMD_SET_COLOR (your existing opcode)
+        rgb_msg.data[0] = RGB_PLUGIN_HEARTBEAT;  // RGB_CMD_SET_COLOR (your existing opcode)
         rgb_msg.data[1] = r;
         rgb_msg.data[2] = g;
         rgb_msg.data[3] = b;
