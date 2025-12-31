@@ -19,14 +19,54 @@ static const rgb_anim_t *rgb_plugins[RGB_PLUGIN_MAX] = {0};
 
 // Active plugin + current parameters
 static const rgb_anim_t *active_anim = NULL;
-static uint32_t current_color = 0;
+static hsv_color_t current_hsv = {0, 0, 0};
 static uint8_t current_brightness = 255;
 
 // Track last command to avoid resetting animation unnecessarily
 static uint8_t last_plugin_id = RGB_PLUGIN_MAX; // invalid sentinel
-static uint32_t last_color = 0;
+static hsv_color_t last_hsv = {0, 0, 0};
 static uint8_t last_brightness = 255;
 static bool has_last = false;
+
+// HSV8 to RGB888 conversion (0-255 range)
+enum { SRC_V = 0, SRC_P = 1, SRC_Q = 2, SRC_T = 3 };
+
+static const uint8_t rgb_src[6][3] = {
+    //  R       G       B
+    { SRC_V, SRC_T, SRC_P }, // region 0
+    { SRC_Q, SRC_V, SRC_P }, // region 1
+    { SRC_P, SRC_V, SRC_T }, // region 2
+    { SRC_P, SRC_Q, SRC_V }, // region 3
+    { SRC_T, SRC_P, SRC_V }, // region 4
+    { SRC_V, SRC_P, SRC_Q }, // region 5
+};
+
+void hsv8_to_rgb888(uint8_t h, uint8_t s, uint8_t v,
+                      uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    if (s == 0) {
+        // Achromatic (grey)
+        *r = v;
+        *g = v;
+        *b = v;
+        return;
+    }
+
+    uint16_t h6 = (uint16_t)h * 6; // Scale to 0-1530
+    uint8_t region = h6 >> 8; // 0-5
+    uint8_t remainder = h6 & 0xFF; // 0-255
+
+    uint8_t p = (v * (255 - s)) >> 8;
+    uint8_t q = (v * (255 - ((s * remainder) >> 8))) >> 8;
+    uint8_t t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
+
+    const uint8_t *src = rgb_src[region];
+    uint8_t vals[4] = { v, p, q, t };
+
+    *r = vals[src[0]];
+    *g = vals[src[1]];
+    *b = vals[src[2]];
+}
 
 // Registration API (mirrors dispatcher_register_handler)
 void io_rgb_register_plugin(rgb_plugin_id_t id, const rgb_anim_t *plugin)
@@ -77,19 +117,22 @@ static void io_rgb_task(void *arg)
 
             if (msg.message_len >= 5) {
 
+                // Extract HSV from message
                 uint8_t plugin_id = msg.data[0];
-                uint8_t r = msg.data[1];
-                uint8_t g = msg.data[2];
-                uint8_t b = msg.data[3];
+                uint8_t h = msg.data[1];
+                uint8_t s = msg.data[2];
+                uint8_t v = msg.data[3];
                 uint8_t brightness = msg.data[4];
 
-                uint32_t new_color = ums3_color(r, g, b);
+                hsv_color_t new_hsv = {h, s, v};
                 uint8_t new_brightness = brightness;
 
                 bool plugin_changed = !has_last || (plugin_id != last_plugin_id);
                 bool params_changed =
                     !has_last ||
-                    (new_color != last_color) ||
+                    (new_hsv.h != last_hsv.h) ||
+                    (new_hsv.s != last_hsv.s) ||
+                    (new_hsv.v != last_hsv.v) ||
                     (new_brightness != last_brightness);
 
                 // Select plugin
@@ -104,7 +147,7 @@ static void io_rgb_task(void *arg)
                     // Always push updated parameters when they change
                     if (params_changed) {
                         if (active_anim->set_color)
-                            active_anim->set_color(new_color);
+                            active_anim->set_color(new_hsv);
 
                         if (active_anim->set_brightness)
                             active_anim->set_brightness(new_brightness);
@@ -112,18 +155,24 @@ static void io_rgb_task(void *arg)
                 }
 
                 // Commit new state
-                current_color = new_color;
+                current_hsv = new_hsv;
                 current_brightness = new_brightness;
                 last_plugin_id = plugin_id;
-                last_color = new_color;
+                last_hsv = new_hsv;
                 last_brightness = new_brightness;
                 has_last = true;
             }
         }
 
-        // Run active animation
+        // Run active animation and get HSV output
+        hsv_color_t out_hsv = current_hsv;
         if (active_anim && active_anim->step)
-            active_anim->step();
+            active_anim->step(&out_hsv);
+
+        // Convert HSV to RGB and output
+        uint8_t r, g, b;
+        hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &r, &g, &b);
+        ums3_set_pixel_color(r, g, b);
 
         vTaskDelay(pdMS_TO_TICKS(33)); // ~30 FPS
     }

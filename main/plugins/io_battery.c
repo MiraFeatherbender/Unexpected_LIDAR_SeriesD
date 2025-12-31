@@ -27,24 +27,26 @@ static int battery_percent_from_voltage(float v)
     return (int)(pct * 100.0f);
 }
 
-// Determine 32-bit packed color based on battery state
-static uint32_t battery_color(float voltage, bool vbus)
+// Determine HSV color based on battery state
+static hsv_color_t battery_hsv_color(float voltage, bool vbus)
 {
+    hsv_color_t hsv;
     if (vbus) {
         if (voltage < 4.0f) {
-            return 0x0000FF; // Blue (charging)
+            hsv.h = 170; hsv.s = 255; hsv.v = 255; // Blue (charging)
         } else {
-            return 0x000000; // Off (full)
+            hsv.h = 0; hsv.s = 0; hsv.v = 0;       // Off (full)
         }
     } else {
         if (voltage >= 3.6f) {
-            return 0x00FF00; // Green (high)
+            hsv.h = 85; hsv.s = 255; hsv.v = 255;  // Green (high)
         } else if (voltage >= 3.3f) {
-            return 0xFF8800; // Orange (medium)
+            hsv.h = 30; hsv.s = 255; hsv.v = 255;  // Orange (medium)
         } else {
-            return 0xFF0000; // Red (low)
+            hsv.h = 0; hsv.s = 255; hsv.v = 255;   // Red (low)
         }
     }
+    return hsv;
 }
 
 void io_battery_init(void)
@@ -80,22 +82,18 @@ static void io_battery_task(void *arg)
         }
 
         // -----------------------------
-        // 1. SEND RGB MESSAGE
+        // 1. SEND HSV MESSAGE
         // -----------------------------
-        uint32_t color = battery_color(voltage, vbus);
-
-        uint8_t r = (color >> 16) & 0xFF;
-        uint8_t g = (color >> 8)  & 0xFF;
-        uint8_t b = (color >> 0)  & 0xFF;
+        hsv_color_t hsv = battery_hsv_color(voltage, vbus);
 
         dispatcher_msg_t rgb_msg = {0};
         rgb_msg.target = TARGET_RGB;
         rgb_msg.source = SOURCE_UNDEFINED;
 
-        rgb_msg.data[0] = RGB_PLUGIN_HEARTBEAT;  // RGB_CMD_SET_COLOR (your existing opcode)
-        rgb_msg.data[1] = r;
-        rgb_msg.data[2] = g;
-        rgb_msg.data[3] = b;
+        rgb_msg.data[0] = RGB_PLUGIN_FIRE;  // plugin ID
+        rgb_msg.data[1] = hsv.h;
+        rgb_msg.data[2] = hsv.s;
+        rgb_msg.data[3] = hsv.v;
         rgb_msg.data[4] = 25;               // brightness (0–255)
         rgb_msg.message_len = 5;
 

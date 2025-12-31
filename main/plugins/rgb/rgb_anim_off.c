@@ -1,25 +1,26 @@
 #include "rgb_anim.h"
 #include "UMSeriesD_idf.h"
 
-// Internal state (kept for consistency)
-static uint32_t off_color = 0;
+// Internal HSV state (kept for consistency)
+static hsv_color_t off_hsv = {0, 0, 0};
 static uint8_t off_brightness = 0;
 
 static void off_begin(void)
 {
-    // Always output black
-    ums3_set_pixel_color(0, 0, 0);
+    // No hardware calls; just reset state if needed
 }
 
-static void off_step(void)
+static void off_step(hsv_color_t *out_hsv)
 {
-    // Always black
-    ums3_set_pixel_color(0, 0, 0);
+    // Always output black (V = 0)
+    out_hsv->h = off_hsv.h; // hue is irrelevant
+    out_hsv->s = off_hsv.s; // saturation is irrelevant
+    out_hsv->v = 0;
 }
 
-static void off_set_color(uint32_t rgb)
+static void off_set_color(hsv_color_t hsv)
 {
-    off_color = rgb; // ignored but stored
+    off_hsv = hsv; // ignored but stored
 }
 
 static void off_set_brightness(uint8_t b)

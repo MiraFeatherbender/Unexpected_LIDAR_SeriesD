@@ -1,24 +1,39 @@
 #include "rgb_anim.h"
 #include "UMSeriesD_idf.h"
+#include "openSimplex2_data.h"
 
-static uint32_t fire_base_color = 0;
+// Internal HSV state
+static hsv_color_t fire_hsv = {18, 220, 255}; // Example: orange (h=18, s=220, v=255)
 static uint8_t fire_brightness = 255;
+static uint16_t fire_noise_index = 0; // Animation frame index
 
 static void fire_begin(void)
 {
     // Reset fire animation state here later
+    fire_noise_index = 0;
 }
 
-static void fire_step(void)
+// Updated: step() outputs HSV via pointer
+static void fire_step(hsv_color_t *out_hsv)
 {
-    // Temporary: orange flicker placeholder
-    ums3_set_pixel_brightness(fire_brightness);
-    ums3_set_pixel_color(255, 80, 10);
+    // Use column 114 from OpenSimplex2 noise as brightness modulator
+    uint8_t noise_brightness = pgm_data[fire_noise_index % PGM_HEIGHT][114];
+
+    // Modulate V channel by noise and user brightness
+    uint16_t mod_v = (noise_brightness * fire_brightness) / 255;
+
+    // Output HSV: keep H/S from state, modulate V
+    out_hsv->h = fire_hsv.h;
+    out_hsv->s = fire_hsv.s;
+    out_hsv->v = mod_v;
+
+    fire_noise_index = (fire_noise_index + 1) % PGM_HEIGHT;
 }
 
-static void fire_set_color(uint32_t rgb)
+// Updated: set_color receives HSV
+static void fire_set_color(hsv_color_t hsv)
 {
-    fire_base_color = rgb;
+    fire_hsv = hsv;
 }
 
 static void fire_set_brightness(uint8_t b)
