@@ -17,7 +17,7 @@ static void fire_begin(void)
 static void fire_step(hsv_color_t *out_hsv)
 {
     // Use column 114 from OpenSimplex2 noise as brightness modulator
-    uint8_t noise_brightness = pgm_data[fire_noise_index % PGM_HEIGHT][114];
+    uint8_t noise_brightness = pgm_data[fire_noise_index % PGM_HEIGHT][fire_noise_index % PGM_WIDTH];
 
     // Modulate V channel by noise and user brightness
     uint16_t mod_v = (noise_brightness * fire_brightness) / 255;

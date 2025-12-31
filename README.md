@@ -31,16 +31,21 @@ This project provides a modular ESP-IDF workspace for Unexpected Maker Series D 
 └── README.md                     # Project documentation (this file)
 ```
 
+
 ## Key Features
 - **UM Series D Board Abstraction:** Clean C wrappers for board features (LEDs, battery, etc.)
-- **Modular Plugin System:** Easily add or remove hardware features (RGB, UART, USB, battery)
+- **Modular Plugin System:** Easily add or remove hardware features (RGB, UART, USB, battery). All animation plugins and color requesters now use HSV (hue, saturation, value) for internal color representation, making color effects and transitions more intuitive and modular.
 - **Dispatcher/Event-Task System:** Central dispatcher enables modular, event-driven or task-based feature integration
-- **RGB LED Animation System:** Modular RGB LED animation support with extensible animation plugins
+- **HSV-based Color Pipeline:** All color effects, plugins, and requesters use HSV (hue, saturation, value) for internal color representation. Conversion to RGB is performed centrally before hardware output, enabling smooth transitions and modular effect development.
+- **RGB LED Animation System:** Modular RGB LED animation support with extensible animation plugins, now unified under the HSV color pipeline.
 - **Battery/Fuel Gauge Support:** Direct support for battery voltage and fuel gauge monitoring (where available)
 - **UART + LIDAR Integration:** Incremental path from UART echo to FreeRTOS task-based LIDAR data parsing
 - **USB Serial Console:** USB support currently provides a serial console interface similar to UART
 - **Kconfig-Driven Configuration:** Select board, features, and options via menuconfig
 - **ESP-IDF Best Practices:** Modern build system, component manager, and FreeRTOS support
+# Developer Notes
+
+All color handling is now performed in HSV (hue, saturation, value, 0–255 range) format throughout the animation pipeline. Plugins and requesters use HSV, and conversion to RGB for hardware output is centralized in the RGB driver. This enables smooth color transitions, easier effect development, and a more modular animation system.
 
 ## Getting Started
 
