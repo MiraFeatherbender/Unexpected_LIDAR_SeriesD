@@ -16,8 +16,8 @@ void app_main(void)
 
     ums3_begin();
     dispatcher_init();
-    io_usb_init();
-    io_uart_init();
+    // io_usb_init();
+    // io_uart_init();
     io_rgb_init();
     rgb_anim_init_all();
     io_battery_init();

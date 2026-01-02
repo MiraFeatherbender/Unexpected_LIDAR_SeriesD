@@ -37,6 +37,13 @@ typedef struct {
 } rgb_anim_t;
 
 // ---------------------------------------------------------
+// Global RGB animation control API
+// Implemented in io_rgb.c
+// ---------------------------------------------------------
+void io_rgb_set_anim_brightness(uint8_t b);
+
+
+// ---------------------------------------------------------
 // Registration API (mirrors dispatcher_register_handler)
 // Implemented in io_rgb.c
 // ---------------------------------------------------------

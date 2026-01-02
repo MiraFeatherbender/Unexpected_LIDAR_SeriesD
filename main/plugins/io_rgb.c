@@ -41,6 +41,14 @@ static const uint8_t rgb_src[6][3] = {
     { SRC_V, SRC_P, SRC_Q }, // region 5
 };
 
+static uint8_t anim_brightness = 255;
+
+void io_rgb_set_anim_brightness(uint8_t b)
+{
+    anim_brightness = b;
+}
+
+
 void hsv8_to_rgb888(uint8_t h, uint8_t s, uint8_t v,
                       uint8_t *r, uint8_t *g, uint8_t *b)
 {
@@ -172,6 +180,7 @@ static void io_rgb_task(void *arg)
         // Convert HSV to RGB and output
         uint8_t r, g, b;
         hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &r, &g, &b);
+        ums3_set_pixel_brightness(anim_brightness);
         ums3_set_pixel_color(r, g, b);
 
         vTaskDelay(pdMS_TO_TICKS(33)); // ~30 FPS
