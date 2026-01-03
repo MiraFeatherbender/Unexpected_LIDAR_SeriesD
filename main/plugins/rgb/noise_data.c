@@ -1,3 +1,4 @@
+
 #include "noise_data.h"
 
 // Array of pointers to each noise palette
@@ -13,6 +14,23 @@ const uint8_t (*get_noise_palette(noise_palette_t palette))[PGM_WIDTH] {
     } else {
         return *noise_palettes[0]; // default to first palette
     }
+}
+
+// Return a random integer in [min, max] inclusive
+static inline int randrange(int min, int max) {
+    return min + (rand() % (max - min + 1));
+}
+
+// Advance walk indices: static if min==max, else random in [min,max] (inclusive)
+void noise_walk_step(uint8_t *x, uint8_t *y, const noise_walk_spec_t *spec) {
+    int8_t dx = (spec->min_dx == spec->max_dx)
+        ? spec->min_dx
+        : (int8_t)randrange(spec->min_dx, spec->max_dx);
+    int8_t dy = (spec->min_dy == spec->max_dy)
+        ? spec->min_dy
+        : (int8_t)randrange(spec->min_dy, spec->max_dy);
+    *x = (uint8_t)(*x + dx);
+    *y = (uint8_t)(*y + dy);
 }
 
 const uint8_t openSimplex2_data[PGM_HEIGHT][PGM_WIDTH] = {    {154, 151, 145, 141, 139, 135, 131, 130, 132, 135, 138, 141, 143, 142, 137, 138, 145, 148, 148, 145, 147, 147, 144, 146, 149, 149, 148, 142, 132, 124, 115, 106, 99, 94, 96, 96, 90, 88, 84, 85, 84, 85, 79, 74, 74, 75, 75, 73, 73, 77, 81, 92, 99, 110, 120, 128, 140, 148, 159, 167, 172, 176, 180, 180, 177, 180, 183, 182, 180, 174, 170, 164, 160, 162, 162, 167, 172, 174, 174, 170, 166, 161, 160, 159, 159, 157, 159, 155, 153, 152, 149, 150, 150, 149, 153, 154, 151, 152, 153, 155, 157, 160, 166, 174, 179, 181, 182, 180, 177, 172, 169, 164, 161, 154, 150, 145, 144, 144, 142, 137, 135, 133, 130, 132, 132, 133, 133, 134, 139, 142, 149, 156, 161, 165, 168, 168, 169, 170, 168, 170, 177, 181, 185, 189, 190, 188, 190, 189, 191, 194, 195, 200, 200, 203, 206, 203, 199, 195, 191, 188, 189, 190, 191, 195, 191, 188, 191, 192, 192, 193, 194, 188, 183, 180, 176, 177, 173, 168, 162, 153, 148, 138, 130, 123, 121, 115, 112, 108, 102, 98, 94, 91, 90, 94, 98, 101, 102, 102, 100, 99, 103, 108, 111, 118, 125, 130, 137, 145, 149, 147, 149, 152, 156, 160, 158, 160, 164, 167, 165, 164, 159, 161, 158, 155, 157, 155, 155, 153, 148, 145, 139, 137, 140, 141, 142, 145, 149, 151, 153, 158, 163, 173, 181, 185, 190, 195, 196, 193, 191, 191, 194, 198, 199, 198, 201, 203},

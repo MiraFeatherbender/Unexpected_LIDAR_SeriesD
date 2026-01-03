@@ -2,62 +2,51 @@
 #include "UMSeriesD_idf.h"
 #include "noise_data.h"
 #include "hsv_palette.h"
+#include "rgb_anim_composer.h"
 #include <stdlib.h>
 
-// Internal HSV state
-static hsv_color_t fire_hsv = {18, 220, 255}; // Example: orange (h=18, s=220, v=255)
-static uint8_t fire_brightness = 255;
-static uint8_t fire_noise_index_x = 0; // Animation frame index
-static uint8_t fire_noise_index_y = 0;
+// --- Fire animation config ---
+static noise_field_t fire_contrast_field = {
+    .data = openSimplex2_data,
+    .x = 0, .y = 0
+};
+static noise_field_t fire_gentle_field = {
+    .data = perlin_noise_data,
+    .x = 0, .y = 0
+};
+static noise_walk_spec_t fire_walk_spec = {
+    .min_dx = 0, .max_dx = 1, .min_dy = 0, .max_dy = 3
+};
+static hsv_color_t fire_theme_color = {18, 220, 255}; // Default orange
 
-static void fire_begin(void)
-{
-    // Reset fire animation state here later
-    fire_noise_index_x = 0;
-    fire_noise_index_y = 0;
+static rgb_anim_composer_config_t fire_composer_config = {
+    .palette = NULL, // Set in init
+    .contrast_noise_field = &fire_contrast_field,
+    .gentle_noise_field = &fire_gentle_field,
+    .contrast_walk_spec = &fire_walk_spec,
+    .gentle_walk_spec = &fire_walk_spec,
+    .palette_index_strategy = palette_index_multiply,
+    .palette_index_modifier = 0, // Not used for multiply
+    .brightness_strategy = brightness_index, // Use standard index-based brightness
+    .user_brightness = 0 // ~0.6 scaling
+};
+
+// --- Animation plugin methods ---
+static void fire_begin(void) {
+    fire_contrast_field.x = 0; fire_contrast_field.y = 0;
+    fire_gentle_field.x = 0; fire_gentle_field.y = 0;
 }
 
-// Updated: step() outputs HSV via pointer
-static void fire_step(hsv_color_t *out_hsv)
-{
-    // Color noise
-    noise_palette_t color_noise_type = NOISE_PALETTE_OPENSIMPLEX2;
-    const uint8_t (*color_noise_table)[PGM_WIDTH] = get_noise_palette(color_noise_type);
-    uint8_t color_noise_value = color_noise_table[fire_noise_index_y][fire_noise_index_x];
-
-    // Brightness noise
-    noise_palette_t brightness_noise_type = NOISE_PALETTE_PERLIN;
-    const uint8_t (*brightness_noise_table)[PGM_WIDTH] = get_noise_palette(brightness_noise_type);
-    uint8_t brightness_noise_value = brightness_noise_table[fire_noise_index_y][fire_noise_index_x];
-
-    // Modulate V channel by noise and user brightness
-    uint8_t adjusted_brightness = (uint8_t)((uint16_t)color_noise_value * brightness_noise_value / 255); // Dim down for fire effect
-
-    // Output HSV: palette-based color + theme hue + modulated brightness
-    const hsv_color_t *palette = get_hsv_palette(HSV_PALETTE_FIRE);
-    hsv_color_t palette_color = palette[(uint8_t)(((uint16_t)color_noise_value * brightness_noise_value) / 255)]; // Index into palette
-    // Apply theme hue from dispatcher
-    uint8_t theme_hue = fire_hsv.h;
-    palette_color.h = hsv_shift_hue(palette_color.h, theme_hue); // Shift hue towards fire theme
-
-    // Apply adjusted brightness
-    io_rgb_set_anim_brightness((uint8_t)(adjusted_brightness*0.6)); // Scale down overall brightness for fire effect
-
-    *out_hsv = palette_color;
-
-    fire_noise_index_x += (rand() % 1);
-    fire_noise_index_y += (rand() % 3);
+static void fire_step(hsv_color_t *out_hsv) {
+    rgb_anim_composer_step(&fire_composer_config, &fire_theme_color, out_hsv);
 }
 
-// Updated: set_color receives HSV
-static void fire_set_color(hsv_color_t hsv)
-{
-    fire_hsv = hsv;
+static void fire_set_color(hsv_color_t hsv) {
+    fire_theme_color = hsv;
 }
 
-static void fire_set_brightness(uint8_t b)
-{
-    fire_brightness = b;
+static void fire_set_brightness(uint8_t b) {
+    fire_composer_config.user_brightness = b;
 }
 
 static const rgb_anim_t fire_plugin = {
@@ -67,7 +56,7 @@ static const rgb_anim_t fire_plugin = {
     .set_brightness = fire_set_brightness,
 };
 
-void rgb_anim_fire_init(void)
-{
+void rgb_anim_fire_init(void) {
+    fire_composer_config.palette = get_hsv_palette(HSV_PALETTE_FIRE);
     io_rgb_register_plugin(RGB_PLUGIN_FIRE, &fire_plugin);
 }

@@ -1,3 +1,5 @@
+
+#include <stdlib.h>
 #include "hsv_palette.h"
 
 static const hsv_color_t * const hsv_palettes[HSV_PALETTE_COUNT] = {
@@ -10,6 +12,56 @@ const hsv_color_t *get_hsv_palette(hsv_palette_t palette) {
     } else {
         return hsv_palettes[0]; // default to first palette
     }
+}
+
+// Lookup color in palette with HSV shift (8-bit wraparound per channel)
+hsv_color_t hsv_palette_lookup(const hsv_color_t *palette, uint8_t index, hsv_color_t shift) {
+    hsv_color_t color = palette[index];
+    color.h = (uint8_t)(color.h + shift.h);
+    color.s = (uint8_t)(color.s + shift.s);
+    color.v = (uint8_t)(color.v + shift.v);
+    return color;
+}
+
+// --- Standard palette index strategies ---
+uint8_t palette_index_multiply(uint8_t contrast, uint8_t gentle, uint8_t modifier) {
+    (void)modifier;
+    return (uint8_t)(((uint16_t)contrast * (uint16_t)gentle) >> 8);
+}
+
+uint8_t palette_index_average(uint8_t contrast, uint8_t gentle, uint8_t modifier) {
+    (void)modifier;
+    return (uint8_t)(((uint16_t)contrast + (uint16_t)gentle) >> 1);
+}
+
+uint8_t palette_index_blend(uint8_t contrast, uint8_t gentle, uint8_t modifier) {
+    // modifier: 0 = all contrast, 255 = all gentle
+    uint16_t z = modifier;
+    return (uint8_t)(((uint16_t)contrast * (255 - z) + (uint16_t)gentle * z) >> 8);
+}
+
+// --- Standard brightness strategies ---
+// Use palette index as brightness (for classic fire, etc.)
+uint8_t brightness_index(const hsv_color_t in, uint8_t palette_index, uint8_t noise_gentle, uint8_t user_brightness) {
+    (void)in; (void)noise_gentle;
+    // Optionally scale by user_brightness
+    return (uint8_t)(((uint16_t)palette_index * user_brightness) >> 8);
+}
+
+// Use palette V channel as brightness (preserves palette intent)
+uint8_t brightness_value(const hsv_color_t in, uint8_t unused1, uint8_t unused2, uint8_t user_brightness) {
+    (void)unused1; (void)unused2;
+    return (uint8_t)(((uint16_t)in.v * user_brightness) >> 8);
+}
+
+// Use palette V channel plus gentle noise (for shimmer/flicker)
+uint8_t brightness_value_noise(const hsv_color_t in, uint8_t unused1, uint8_t noise, uint8_t user_brightness) {
+    (void)unused1;
+    // Gentle noise is expected to be centered around 128
+    int16_t v = (int16_t)in.v + (((int16_t)noise - 128) >> 4); // Small nudge of +/- 8
+    if (v < 0) v = 0;
+    if (v > 255) v = 255;
+    return (uint8_t)(((uint16_t)v * user_brightness) >> 8);
 }
 
 const hsv_color_t hsv_palette_fire[HSV_PALETTE_SIZE] = {

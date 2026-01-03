@@ -35,7 +35,7 @@ static hsv_color_t battery_hsv_color(float voltage, bool vbus)
         if (voltage < 4.0f) {
             hsv.h = 90; hsv.s = 255; hsv.v = 255; // Blue (charging)
         } else {
-            hsv.h = 10; hsv.s = 255; hsv.v = 255;       // Off (full)
+            hsv.h = 10; hsv.s = 0; hsv.v = 0;       // Off (full)
         }
     } else {
         if (voltage >= 3.6f) {
@@ -94,7 +94,7 @@ static void io_battery_task(void *arg)
         rgb_msg.data[1] = hsv.h;
         rgb_msg.data[2] = hsv.s;
         rgb_msg.data[3] = hsv.v;
-        rgb_msg.data[4] = 40;               // brightness (0–255)
+        rgb_msg.data[4] = 160;               // brightness (0–255)
         rgb_msg.message_len = 5;
 
         dispatcher_send(&rgb_msg);

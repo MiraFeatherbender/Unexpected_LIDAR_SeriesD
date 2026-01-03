@@ -21,9 +21,10 @@ This project provides a modular ESP-IDF workspace for Unexpected Maker Series D 
 │   │   ├── io_uart0.*            # UART0 abstraction (for LIDAR, etc.)
 │   │   ├── io_usb.*              # USB device/host support
 │   │   └── rgb/                  # RGB LED animation implementations
-│   │       ├── hsv_palette.*     # HSV palette and color pipeline
-│   │       ├── noise_data.*      # Noise data for animation
-│   │       ├── rgb_anim_*.c/h    # Animation plugin implementations
+│   │       ├── hsv_palette.*     # HSV palette descriptors, lookup, brightness strategies
+│   │       ├── noise_data.*      # Noise field descriptors, noise walk helpers
+│   │       ├── rgb_anim_composer.* # Central palette/noise animation engine (unified logic)
+│   │       ├── rgb_anim_*.c/h    # Animation preset selectors (config only)
 │   │       └── resources/        # Palette editor, docs, and noise assets
 │   │           ├── HSV_palette_editor.ipynb      # Interactive palette editor (Jupyter)
 │   │           ├── palette_brightness_ranking.md # Effect/brightness mapping docs
@@ -45,10 +46,12 @@ This project provides a modular ESP-IDF workspace for Unexpected Maker Series D 
 
 ## Key Features
 - **UM Series D Board Abstraction:** Clean C wrappers for board features (LEDs, battery, etc.)
-- **Modular Plugin System:** Easily add or remove hardware features (RGB, UART, USB, battery). All animation plugins and color requesters now use HSV (hue, saturation, value) for internal color representation, making color effects and transitions more intuitive and modular.
+- **Modular Plugin System:** Easily add or remove hardware features (RGB, UART, USB, battery). All animation plugins and color requesters use HSV (hue, saturation, value) for internal color representation, making color effects and transitions more intuitive and modular.
 - **Dispatcher/Event-Task System:** Central dispatcher enables modular, event-driven or task-based feature integration
 - **HSV-based Color Pipeline:** All color effects, plugins, and requesters use HSV (hue, saturation, value) for internal color representation. Conversion to RGB is performed centrally before hardware output, enabling smooth transitions and modular effect development.
-- **RGB LED Animation System:** Modular RGB LED animation support with extensible animation plugins, now unified under the HSV color pipeline.
+- **Unified Palette/Noise Animation Engine:** All palette/noise-based animations are now configuration-driven and use a single, unified engine (`rgb_anim_composer`). The core logic for palette lookup, noise sampling, walk patterns, and brightness strategies is centralized, ensuring consistency and reducing code duplication.
+- **Config-Driven Animation Presets:** Animation files (e.g., `rgb_anim_fire.c`) are now minimal preset selectors. They only specify which palette, noise field, walk spec, and brightness strategy to use—no animation logic is duplicated. New effects are created by providing a config to the composer, not by writing new logic.
+- **Extensible Palettes & Noise:** Palettes and noise fields are described in `hsv_palette.*` and `noise_data.*`, with helpers for lookup, walk, and brightness. Tuning and new effects are achieved by changing configuration, not code.
 - **Battery/Fuel Gauge Support:** Direct support for battery voltage and fuel gauge monitoring (where available)
 - **UART + LIDAR Integration:** Incremental path from UART echo to FreeRTOS task-based LIDAR data parsing
 - **USB Serial Console:** USB support currently provides a serial console interface similar to UART
@@ -59,14 +62,13 @@ This project provides a modular ESP-IDF workspace for Unexpected Maker Series D 
 - **Noise-Driven Animation:** Uses Perlin and OpenSimplex2 noise for organic flicker, shimmer, and dynamic effects. Noise data and visualizations are in `main/plugins/rgb/resources/`.
 - **Battery State Effects:** LED color and animation mapped to battery status, with clear, intuitive visual feedback. See `battery_state_effects.md` for mapping.
 
-# Developer Notes
 
-All color handling is now performed in HSV (hue, saturation, value, 0–255 range) format throughout the animation pipeline. Plugins and requesters use HSV, and conversion to RGB for hardware output is centralized in the RGB driver. This enables smooth color transitions, easier effect development, and a more modular animation system.
+
 
 ## Getting Started
 
 ### Prerequisites
-- ESP-IDF v5.5.1 installed ([Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html))
+- ESP-IDF v5.5.1 ([Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html))
 - Supported Series D board (EdgeS3[D], TinyS3[D], FeatherS3[D], or ProS3[D])
 - USB cable for programming
 
@@ -76,17 +78,11 @@ All color handling is now performed in HSV (hue, saturation, value, 0–255 rang
 
    ```sh
    idf.py set-target esp32s3
-   ```
-
-2. Open the configuration menu:
-
-   ```sh
    idf.py menuconfig
    ```
 
    - In the "UM Series D Board Configuration" menu:
      - **Select your board type**
-     - **Enable/disable features** (RGB, UART, USB, battery, etc.)
      - **Configure UART/LIDAR options** (UART port, baud rate, etc.)
 
 ### Build and Flash
@@ -96,10 +92,8 @@ All color handling is now performed in HSV (hue, saturation, value, 0–255 rang
    ```sh
    idf.py -p PORT flash monitor
    ```
-
    (Replace `PORT` with your serial port, e.g., COM3 or /dev/ttyUSB0)
-
-2. To exit the monitor, type `Ctrl-]`.
+   - To exit the monitor, type `Ctrl-]`.
 
 ## UART + LIDAR Development Path
 
@@ -108,13 +102,15 @@ All color handling is now performed in HSV (hue, saturation, value, 0–255 rang
 - **Step 3:** Integrate RP-LIDAR A1M8 data parsing and processing
 - **Step 4:** Extend for mapping, visualization, or robotics applications
 
+
 ## Animation & Palette System
 
-- HSV-based palette system with 6-point curve editor for H, S, V channels (see palette editor notebook).
-- Theme presets for rapid switching (Fire, Water, Lightning, Toxic, Aurora).
-- Brightness mapping strategies: Index, Value, Value+Noise, and more. See `palette_brightness_ranking.md` for effect/brightness mapping.
-- Noise-driven animation for natural flicker and shimmer (Perlin/OpenSimplex2).
-- Battery state LED mapping: see `battery_state_effects.md` for how LED color/animation reflects battery status.
+- All palette/noise-based animations use a single, configuration-driven engine (`rgb_anim_composer`). Animation files are just presets—no duplicated logic.
+- Palette lookup, noise sampling, walk, and brightness strategies are handled centrally for consistency and easy tuning.
+- Create or tune effects by adjusting configuration or descriptors—no need to rewrite animation logic.
+- Use the palette editor notebook for HSV curve design; see resources for noise data and effect mapping.
+- Battery status effects use the same unified system.
+- Basic animations (solid, blink, fade) remain independent and use their own logic.
 
 ## Example Output
 
