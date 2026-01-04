@@ -27,26 +27,38 @@ static int battery_percent_from_voltage(float v)
     return (int)(pct * 100.0f);
 }
 
-// Determine HSV color based on battery state
-static hsv_color_t battery_hsv_color(float voltage, bool vbus)
-{
-    hsv_color_t hsv;
-    if (vbus) {
-        if (voltage < 4.0f) {
-            hsv.h = 90; hsv.s = 255; hsv.v = 255; // Blue (charging)
-        } else {
-            hsv.h = 10; hsv.s = 0; hsv.v = 0;       // Off (full)
-        }
-    } else {
-        if (voltage >= 3.6f) {
-            hsv.h = 65; hsv.s = 255; hsv.v = 255;  // Green (high)
-        } else if (voltage >= 3.3f) {
-            hsv.h = 30; hsv.s = 255; hsv.v = 255;  // Orange (medium)
-        } else {
-            hsv.h = 0; hsv.s = 255; hsv.v = 255;   // Red (low)
+
+// Central struct for RGB plugin, HSV, and brightness per tier
+typedef struct {
+    float min_voltage;
+    bool vbus_required; // true: charging, false: discharging
+    uint8_t plugin;
+    uint8_t h, s, v, brightness;
+} battery_rgb_tier_t;
+
+static const battery_rgb_tier_t battery_rgb_tiers[] = {
+    // Charging tiers
+    
+    { 0.0f,  true, RGB_PLUGIN_WATER,     130,   0,   0,   40 }, // Charging, low voltage
+    { 3.7f,  true, RGB_PLUGIN_WATER,     130,   0,   0,   40 }, // Charging, mid voltage
+    { 4.0f,  true, RGB_PLUGIN_AURORA,     84,   0,   0,   30 }, // Charging, full
+    // Discharging tiers
+    { 0.0f, false, RGB_PLUGIN_HEARTBEAT,   0, 255, 255,  255 }, // Discharging, low
+    { 3.3f, false, RGB_PLUGIN_FIRE,       30,   0,   0,  160 }, // Discharging, medium
+    { 3.6f, false, RGB_PLUGIN_BREATHE,    88, 255, 200,  255 }, // Discharging, high
+};
+
+#define NUM_TIERS (sizeof(battery_rgb_tiers)/sizeof(battery_rgb_tiers[0]))
+
+// Select the appropriate RGB tier for the current voltage and VBUS state
+static const battery_rgb_tier_t* battery_get_rgb_tier(float voltage, bool vbus) {
+    const battery_rgb_tier_t* selected = NULL;
+    for (size_t i = 0; i < NUM_TIERS; ++i) {
+        if (battery_rgb_tiers[i].vbus_required == vbus && voltage >= battery_rgb_tiers[i].min_voltage) {
+            selected = &battery_rgb_tiers[i];
         }
     }
-    return hsv;
+    return selected;
 }
 
 void io_battery_init(void)
@@ -81,20 +93,29 @@ static void io_battery_task(void *arg)
             state = "DISCHARGING";
         }
 
-        // -----------------------------
-        // 1. SEND HSV MESSAGE
-        // -----------------------------
-        hsv_color_t hsv = battery_hsv_color(voltage, vbus);
 
+        // -----------------------------
+        // 1. SEND RGB TIER MESSAGE
+        // -----------------------------
         dispatcher_msg_t rgb_msg = {0};
         rgb_msg.target = TARGET_RGB;
         rgb_msg.source = SOURCE_UNDEFINED;
 
-        rgb_msg.data[0] = RGB_PLUGIN_FIRE;  // plugin ID
-        rgb_msg.data[1] = hsv.h;
-        rgb_msg.data[2] = hsv.s;
-        rgb_msg.data[3] = hsv.v;
-        rgb_msg.data[4] = 160;               // brightness (0–255)
+        const battery_rgb_tier_t* tier = battery_get_rgb_tier(voltage, vbus);
+        if (tier) {
+            rgb_msg.data[0] = tier->plugin;
+            rgb_msg.data[1] = tier->h;
+            rgb_msg.data[2] = tier->s;
+            rgb_msg.data[3] = tier->v;
+            rgb_msg.data[4] = tier->brightness;
+        } else {
+            // fallback/default values
+            rgb_msg.data[0] = RGB_PLUGIN_AURORA;
+            rgb_msg.data[1] = 84;
+            rgb_msg.data[2] = 0;
+            rgb_msg.data[3] = 0;
+            rgb_msg.data[4] = 30;
+        }
         rgb_msg.message_len = 5;
 
         dispatcher_send(&rgb_msg);

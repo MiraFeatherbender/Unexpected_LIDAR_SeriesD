@@ -5,6 +5,8 @@
 void rgb_anim_off_init(void);
 void rgb_anim_solid_init(void);
 void rgb_anim_fire_init(void);
+void rgb_anim_aurora_init(void);
+void rgb_anim_water_init(void);
 void rgb_anim_heartbeat_init(void);
 void rgb_anim_breathe_init(void);
 

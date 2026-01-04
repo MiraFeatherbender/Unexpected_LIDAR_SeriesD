@@ -28,7 +28,7 @@ static rgb_anim_composer_config_t fire_composer_config = {
     .palette_index_strategy = palette_index_multiply,
     .palette_index_modifier = 0, // Not used for multiply
     .brightness_strategy = brightness_index, // Use standard index-based brightness
-    .user_brightness = 0 // ~0.6 scaling
+    .user_brightness = 0 // assigned by set_brightness
 };
 
 // --- Animation plugin methods ---
