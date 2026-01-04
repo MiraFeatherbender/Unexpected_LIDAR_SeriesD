@@ -84,7 +84,7 @@ void tinyusb_cdc_rx_callback(int itf, cdcacm_event_t *event)
         if (ret == ESP_OK && msg.message_len > 0) {
 
             msg.source = SOURCE_USB;
-            msg.target = TARGET_UART;   // USB → UART bridge
+            msg.target = TARGET_LIDAR_COORD;   // USB → LIDAR_COORD bridge
 
             BaseType_t hp = pdFALSE;
             dispatcher_send_from_isr(&msg, &hp);

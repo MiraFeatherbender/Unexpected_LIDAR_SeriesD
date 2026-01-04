@@ -1,4 +1,4 @@
-#include "io_uart0.h"
+#include "io_lidar.h"
 #include "dispatcher.h"
 
 #include "freertos/FreeRTOS.h"
@@ -17,15 +17,15 @@ static QueueHandle_t uart_tx_queue = NULL;
 static QueueHandle_t uart_event_queue = NULL;
 
 // Forward declarations
-static void io_uart_tx_task(void *arg);
+static void io_lidar_tx_task(void *arg);
 
 // Dispatcher handler — messages routed TO UART
-static void io_uart_dispatcher_handler(const dispatcher_msg_t *msg)
+static void io_lidar_dispatcher_handler(const dispatcher_msg_t *msg)
 {
     xQueueSend(uart_tx_queue, msg, 0);
 }
 
-void io_uart_init(void)
+void io_lidar_init(void)
 {
     // Create TX queue
     uart_tx_queue = xQueueCreate(UART_TX_QUEUE_LEN, sizeof(dispatcher_msg_t));
@@ -62,20 +62,19 @@ void io_uart_init(void)
                                  UART_PIN_NO_CHANGE));
 
     // Register with dispatcher
-    dispatcher_register_handler(TARGET_UART, io_uart_dispatcher_handler);
+    dispatcher_register_handler(TARGET_LIDAR_IO, io_lidar_dispatcher_handler);
 
     // Start TX task
-    xTaskCreate(io_uart_tx_task, "io_uart_tx_task", 4096, NULL, 9, NULL);
+    xTaskCreate(io_lidar_tx_task, "io_lidar_tx_task", 4096, NULL, 9, NULL);
 
     // Start RX event task
-    xTaskCreate(io_uart_event_task, "io_uart_event_task", 4096, NULL, 10, NULL);
-
+    xTaskCreate(io_lidar_event_task, "io_lidar_event_task", 4096, NULL, 10, NULL);
 
 
 }
 
 // RX event task — receives data FROM UART and sends it INTO dispatcher
-void io_uart_event_task(void *arg)
+void io_lidar_event_task(void *arg)
 {
     uart_event_t event;
 
@@ -91,8 +90,8 @@ void io_uart_event_task(void *arg)
                                                   20 / portTICK_PERIOD_MS);
 
                 if (msg.message_len > 0) {
-                    msg.source = SOURCE_UART;
-                    msg.target = TARGET_USB;   // UART → USB bridge
+                    msg.source = SOURCE_LIDAR_IO;
+                    msg.target = TARGET_LIDAR_COORD;   // UART → LIDAR_COORD bridge
                     dispatcher_send(&msg);
                 }
             }
@@ -101,7 +100,7 @@ void io_uart_event_task(void *arg)
 }
 
 // TX task — sends data OUT over UART
-static void io_uart_tx_task(void *arg)
+static void io_lidar_tx_task(void *arg)
 {
     dispatcher_msg_t msg;
 

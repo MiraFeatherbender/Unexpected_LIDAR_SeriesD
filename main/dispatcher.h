@@ -12,6 +12,8 @@
 typedef enum {
     SOURCE_USB,
     SOURCE_UART,
+    SOURCE_LIDAR_IO,
+    SOURCE_LIDAR_COORD,
     SOURCE_UNDEFINED
 } dispatch_source_t;
 
@@ -19,6 +21,8 @@ typedef enum {
     TARGET_USB,
     TARGET_UART,
     TARGET_RGB,
+    TARGET_LIDAR_IO,
+    TARGET_LIDAR_COORD,
     TARGET_MAX
 } dispatch_target_t;
 

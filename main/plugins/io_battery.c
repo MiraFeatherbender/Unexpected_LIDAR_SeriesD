@@ -137,7 +137,7 @@ static void io_battery_task(void *arg)
             percent
         );
 
-        dispatcher_send(&usb_msg);
+        //dispatcher_send(&usb_msg);
 
         // -----------------------------
         // Wait for next cycle
