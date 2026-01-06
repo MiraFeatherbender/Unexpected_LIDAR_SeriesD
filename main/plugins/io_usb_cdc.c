@@ -1,4 +1,4 @@
-#include "io_usb.h"
+#include "io_usb_cdc.h"
 #include "dispatcher.h"
 
 #include "freertos/FreeRTOS.h"
@@ -23,7 +23,7 @@ static void io_usb_dispatcher_handler(const dispatcher_msg_t *msg)
     xQueueSend(usb_tx_queue, msg, 0);
 }
 
-void io_usb_init(void)
+void io_usb_cdc_init(void)
 {
     // Create TX queue
     usb_tx_queue = xQueueCreate(USB_TX_QUEUE_LEN, sizeof(dispatcher_msg_t));

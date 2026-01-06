@@ -162,12 +162,17 @@ static void io_rgb_task(void *arg)
     while (1) {
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
             // Always capture button state if present
-            if (msg.source == SOURCE_MSC_BUTTON && msg.message_len >= 1) {
+            if ((msg.source == SOURCE_USB_MSC || msg.source == SOURCE_MSC_BUTTON) && msg.message_len >= 1) {
+                uint8_t prev_button_state = button_state;
                 button_state = msg.data[0];
+                if (button_state == 0xA5 && prev_button_state == 0x5A) {
+                    // Restore last animation immediately
+                    rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 190, 220, 140, 64);
+                }
             }
 
             switch (button_state) {
-                case 0xA5:
+                case 0x5A:
                     // Normal mode: process animation messages
                     if (msg.source != SOURCE_MSC_BUTTON && msg.message_len >= 5) {
                         uint8_t plugin_id = msg.data[0];
@@ -178,7 +183,7 @@ static void io_rgb_task(void *arg)
                         rgb_set_animation(plugin_id, h, s, v, brightness);
                     }
                     break;
-                case 0x5A:
+                case 0xA5:
                     // Override mode: force dedicated animation
                     rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 85, 220, 140, 128);
                     break;

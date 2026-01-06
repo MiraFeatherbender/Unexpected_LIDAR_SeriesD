@@ -76,12 +76,10 @@ void IRAM_ATTR button_gpio_isr(void *arg) {
     memset(msg.target_id, TARGET_MAX, sizeof(msg.target_id));
     switch(button_state){
         case(0x5A):
-            msg.target_id[0] = TARGET_USB_CDC;
-            msg.target_id[1] = TARGET_RGB;
+            msg.target_id[0] = TARGET_USB_MSC;
             break;
         case(0xA5):
-            msg.target_id[0] = TARGET_RGB;
-            msg.target_id[1] = TARGET_USB_CDC;
+            msg.target_id[0] = TARGET_USB_MSC;
             break;
     }
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;

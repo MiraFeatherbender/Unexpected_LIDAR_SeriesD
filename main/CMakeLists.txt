@@ -9,8 +9,8 @@ idf_component_register(
 
         # Core plugin sources
         "plugins/io_gpio.c"
-        "plugins/io_usb.c"
-        #"plugins/io_usb_msc.c"
+        "plugins/io_usb_cdc.c"
+        "plugins/io_usb_msc.c"
         "plugins/io_lidar.c"
         "plugins/io_rgb.c"
         "plugins/io_battery.c"
@@ -30,7 +30,10 @@ idf_component_register(
         esp_adc
         led_strip
         esp_driver_i2c
-
+        fatfs
+        wear_levelling
+        esp_partition
+        
     INCLUDE_DIRS
         "."               # main/
         "plugins"         # io_*.h

@@ -11,7 +11,7 @@
 
 typedef enum {
     SOURCE_USB_CDC,
-    SOURCE_UART,
+    SOURCE_USB_MSC,
     SOURCE_LIDAR_IO,
     SOURCE_LIDAR_COORD,
     SOURCE_MSC_BUTTON,
@@ -22,7 +22,6 @@ typedef enum {
 typedef enum {
     TARGET_USB_CDC,
     TARGET_USB_MSC,
-    TARGET_UART,
     TARGET_RGB,
     TARGET_LIDAR_IO,
     TARGET_LIDAR_COORD,
