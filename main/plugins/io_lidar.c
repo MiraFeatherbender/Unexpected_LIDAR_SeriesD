@@ -88,10 +88,10 @@ void io_lidar_event_task(void *arg)
                                                   msg.data,
                                                   BUF_SIZE - 1,
                                                   20 / portTICK_PERIOD_MS);
-
+                memset(msg.targets, TARGET_MAX, sizeof(msg.targets));
                 if (msg.message_len > 0) {
                     msg.source = SOURCE_LIDAR_IO;
-                    msg.target = TARGET_LIDAR_COORD;   // UART → LIDAR_COORD bridge
+                    msg.targets[0] = TARGET_LIDAR_COORD;   // UART → LIDAR_COORD bridge
                     dispatcher_send(&msg);
                 }
             }

@@ -1,0 +1,183 @@
+#include "dispatcher.h"
+#include "io_gpio.h"
+#include "soc/gpio_reg.h"
+#include "driver/gpio.h"
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+
+static QueueHandle_t gpio_event_queue = NULL;
+
+void io_gpio_init(void) {
+    gpio_event_queue = xQueueCreate(IO_GPIO_EVENT_QUEUE_LEN, sizeof(gpio_isr_msg_t));   
+    gpio_install_isr_service(0); 
+    setup_button();
+    //setup_line_sensor();
+    // setup_test_led();
+
+    // Start GPIO event task
+    xTaskCreate(io_gpio_event_task, "io_gpio_event_task", 4096, NULL, 9, NULL);
+
+}
+
+// Helper: pack pin states from all_gpio for a set
+static inline uint8_t pack_gpio_set(const gpio_num_t *pins, size_t pin_count, uint32_t all_gpio) {
+    uint8_t state = 0;
+    for (size_t i = 0; i < pin_count; ++i) {
+        state <<= 1;
+        state |= (all_gpio >> pins[i]) & 0x01;
+    }
+    return state;
+}
+
+// Simple debounce function for a button pin
+bool debounce_button(gpio_num_t pin) {
+    uint16_t state = 0xFFFF;
+    for (int count = 0; count < 32; count++) {
+        state = (state << 1) | gpio_get_level(pin);
+        esp_rom_delay_us(500); // 
+        if ((state & 0xFFFF) == 0) {
+            // 8 consecutive zeros: button is stably LOW
+            return true;
+        }
+    }
+    // Not stable low
+    return false;
+}
+
+// Generic GPIO ISR registration function
+void register_gpio_isr(
+    const gpio_num_t *pins, size_t pin_count,
+    gpio_isr_t isr_func, void *isr_ctx, gpio_config_t *cfg)
+    {
+    for (size_t i = 0; i < pin_count; ++i) {
+        gpio_config_t local_cfg = *cfg;
+        local_cfg.pin_bit_mask = (1ULL << pins[i]);
+        gpio_config(&local_cfg);
+        gpio_isr_handler_add(pins[i], isr_func, isr_ctx);
+    }
+}
+
+static uint8_t button_state = 0xA5; // Initial "On" state. bitwise invert for "Off"
+
+void IRAM_ATTR button_gpio_isr(void *arg) {
+    isr_ctx_t *ctx = (isr_ctx_t *)arg;
+    if (!debounce_button(ctx->pins[0])) {
+        return;
+    }
+    gpio_set_level(13, button_state & 0x01); // Update test LED
+    button_state ^= 0xFF; // Toggle state
+    gpio_isr_msg_t msg = { 
+        ctx->source_id,
+        {0}, // target_id to be filled below 
+        button_state
+    };
+    memset(msg.target_id, TARGET_MAX, sizeof(msg.target_id));
+    switch(button_state){
+        case(0x5A):
+            msg.target_id[0] = TARGET_USB_CDC;
+            msg.target_id[1] = TARGET_RGB;
+            break;
+        case(0xA5):
+            msg.target_id[0] = TARGET_RGB;
+            msg.target_id[1] = TARGET_USB_CDC;
+            break;
+    }
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xQueueSendFromISR(ctx->queue, &msg, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
+}
+
+void IRAM_ATTR line_sensor_gpio_isr(void *arg) {
+    isr_ctx_t *ctx = (isr_ctx_t *)arg;
+    uint32_t all_gpio = REG_READ(GPIO_IN_REG);
+    uint8_t packed = pack_gpio_set(ctx->pins, ctx->pin_count, all_gpio);
+    gpio_isr_msg_t msg = { 
+        ctx->source_id, 
+        {0}, // target_id to be filled below
+        packed 
+    };
+    memset(msg.target_id, TARGET_MAX, sizeof(msg.target_id));
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xQueueSendFromISR(ctx->queue, &msg, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
+}
+
+
+// Hardcoded setup for button on GPIO9
+void setup_button(void) {
+    static gpio_num_t pins[1] = {12};
+    static isr_ctx_t ctx = {
+        .pins = pins,
+        .pin_count = 1,
+        .source_id = SOURCE_MSC_BUTTON,
+    };
+    ctx.queue = gpio_event_queue;
+
+    gpio_config_t cfg = {
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_NEGEDGE
+    };
+    register_gpio_isr(pins, 1, button_gpio_isr, &ctx, &cfg);
+}
+
+// Hardcoded setup for line sensor on GPIO0-7
+void setup_line_sensor(void) {
+    static gpio_num_t pins[8] = {0,1,2,3,4,5,6,7};
+    static isr_ctx_t ctx = {
+        .pins = pins,
+        .pin_count = 8,
+        .source_id = SOURCE_LINE_SENSOR, // Example source ID
+        .target_id[0] = TARGET_MAX, // Example target ID
+    };
+    ctx.queue = gpio_event_queue;
+   
+    gpio_config_t cfg = {
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_ANYEDGE
+    };
+    register_gpio_isr(pins, 8, line_sensor_gpio_isr, &ctx, &cfg);
+}
+
+bool io_gpio_get_state(gpio_num_t gpio_num) {
+    return gpio_get_level(gpio_num);
+}
+
+
+void setup_test_led(void) {
+    gpio_config_t cfg = {
+        .pin_bit_mask = (1ULL << 13),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&cfg);
+    gpio_set_level(13, 0); // Start with LED off
+
+    cfg.pin_bit_mask = (1ULL << 14);
+    cfg.mode = GPIO_MODE_INPUT;
+    gpio_config(&cfg);
+}
+
+
+void io_gpio_event_task(void *arg) {
+    gpio_isr_msg_t msg;
+    while (1) {
+        if (xQueueReceive(gpio_event_queue, &msg, portMAX_DELAY) == pdTRUE) {
+            // Forward to dispatcher
+            dispatcher_msg_t dmsg = {
+                .source = msg.source_id,
+                .message_len = 1,
+                .data = { msg.state }
+            };
+            memcpy(dmsg.targets, msg.target_id, sizeof(dmsg.targets));
+            dispatcher_send(&dmsg);
+        }
+    }
+}

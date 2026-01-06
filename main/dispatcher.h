@@ -10,15 +10,18 @@
 // enums and structs for communication state and context
 
 typedef enum {
-    SOURCE_USB,
+    SOURCE_USB_CDC,
     SOURCE_UART,
     SOURCE_LIDAR_IO,
     SOURCE_LIDAR_COORD,
+    SOURCE_MSC_BUTTON,
+    SOURCE_LINE_SENSOR,
     SOURCE_UNDEFINED
 } dispatch_source_t;
 
 typedef enum {
-    TARGET_USB,
+    TARGET_USB_CDC,
+    TARGET_USB_MSC,
     TARGET_UART,
     TARGET_RGB,
     TARGET_LIDAR_IO,
@@ -28,7 +31,7 @@ typedef enum {
 
 typedef struct {
     dispatch_source_t source;
-    dispatch_target_t target;
+    dispatch_target_t targets[TARGET_MAX];
     size_t message_len;
     uint8_t data[BUF_SIZE];
 } dispatcher_msg_t;

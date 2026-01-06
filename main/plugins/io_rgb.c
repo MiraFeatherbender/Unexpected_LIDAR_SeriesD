@@ -28,6 +28,46 @@ static hsv_color_t last_hsv = {0, 0, 0};
 static uint8_t last_brightness = 255;
 static bool has_last = false;
 
+// Helper: set animation/plugin and parameters
+static void rgb_set_animation(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v, uint8_t brightness) {
+    hsv_color_t new_hsv = {h, s, v};
+    uint8_t new_brightness = brightness;
+
+    bool plugin_changed = !has_last || (plugin_id != last_plugin_id);
+    bool params_changed =
+        !has_last ||
+        (new_hsv.h != last_hsv.h) ||
+        (new_hsv.s != last_hsv.s) ||
+        (new_hsv.v != last_hsv.v) ||
+        (new_brightness != last_brightness);
+
+    // Select plugin
+    active_anim = rgb_plugins[plugin_id];
+
+    if (active_anim) {
+        // Only reset animation when plugin changes
+        if (plugin_changed && active_anim->begin)
+            active_anim->begin();
+
+        // Always push updated parameters when they change
+        if (params_changed) {
+            if (active_anim->set_color)
+                active_anim->set_color(new_hsv);
+
+            if (active_anim->set_brightness)
+                active_anim->set_brightness(new_brightness);
+        }
+    }
+
+    // Commit new state
+    current_hsv = new_hsv;
+    current_brightness = new_brightness;
+    last_plugin_id = plugin_id;
+    last_hsv = new_hsv;
+    last_brightness = new_brightness;
+    has_last = true;
+}
+
 // HSV8 to RGB888 conversion (0-255 range)
 enum { SRC_V = 0, SRC_P = 1, SRC_Q = 2, SRC_T = 3 };
 
@@ -117,58 +157,31 @@ void io_rgb_init(void)
 static void io_rgb_task(void *arg)
 {
     dispatcher_msg_t msg;
+    static uint8_t button_state = 0xA5; // Default to 'on' at startup
 
     while (1) {
-
-        // Handle incoming unified RGB command
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
+            // Always capture button state if present
+            if (msg.source == SOURCE_MSC_BUTTON && msg.message_len >= 1) {
+                button_state = msg.data[0];
+            }
 
-            if (msg.message_len >= 5) {
-
-                // Extract HSV from message
-                uint8_t plugin_id = msg.data[0];
-                uint8_t h = msg.data[1];
-                uint8_t s = msg.data[2];
-                uint8_t v = msg.data[3];
-                uint8_t brightness = msg.data[4];
-
-                hsv_color_t new_hsv = {h, s, v};
-                uint8_t new_brightness = brightness;
-
-                bool plugin_changed = !has_last || (plugin_id != last_plugin_id);
-                bool params_changed =
-                    !has_last ||
-                    (new_hsv.h != last_hsv.h) ||
-                    (new_hsv.s != last_hsv.s) ||
-                    (new_hsv.v != last_hsv.v) ||
-                    (new_brightness != last_brightness);
-
-                // Select plugin
-                active_anim = rgb_plugins[plugin_id];
-
-                if (active_anim) {
-
-                    // Only reset animation when plugin changes
-                    if (plugin_changed && active_anim->begin)
-                        active_anim->begin();
-
-                    // Always push updated parameters when they change
-                    if (params_changed) {
-                        if (active_anim->set_color)
-                            active_anim->set_color(new_hsv);
-
-                        if (active_anim->set_brightness)
-                            active_anim->set_brightness(new_brightness);
+            switch (button_state) {
+                case 0xA5:
+                    // Normal mode: process animation messages
+                    if (msg.source != SOURCE_MSC_BUTTON && msg.message_len >= 5) {
+                        uint8_t plugin_id = msg.data[0];
+                        uint8_t h = msg.data[1];
+                        uint8_t s = msg.data[2];
+                        uint8_t v = msg.data[3];
+                        uint8_t brightness = msg.data[4];
+                        rgb_set_animation(plugin_id, h, s, v, brightness);
                     }
-                }
-
-                // Commit new state
-                current_hsv = new_hsv;
-                current_brightness = new_brightness;
-                last_plugin_id = plugin_id;
-                last_hsv = new_hsv;
-                last_brightness = new_brightness;
-                has_last = true;
+                    break;
+                case 0x5A:
+                    // Override mode: force dedicated animation
+                    rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 85, 220, 140, 128);
+                    break;
             }
         }
 

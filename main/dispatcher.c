@@ -51,8 +51,9 @@ static void dispatcher_task(void *arg)
         // Wait for incoming messages
         if (xQueueReceive(dispatcher_queue, &msg, portMAX_DELAY) == pdTRUE) {
             // Call the registered handler for the target
-            if (msg.target < TARGET_MAX && handlers[msg.target] != NULL) {
-                handlers[msg.target](&msg);
+            for(int i = 0; i < TARGET_MAX; i++){
+                if(msg.targets[i] == TARGET_MAX) continue;
+                if (handlers[msg.targets[i]]) handlers[msg.targets[i]](&msg);
             }
         }
     }

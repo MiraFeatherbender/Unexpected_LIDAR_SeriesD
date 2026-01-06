@@ -45,7 +45,7 @@ static const battery_rgb_tier_t battery_rgb_tiers[] = {
     // Discharging tiers
     { 0.0f, false, RGB_PLUGIN_HEARTBEAT,   0, 255, 255,  255 }, // Discharging, low
     { 3.3f, false, RGB_PLUGIN_FIRE,       30,   0,   0,  160 }, // Discharging, medium
-    { 3.6f, false, RGB_PLUGIN_BREATHE,    88, 255, 200,  255 }, // Discharging, high
+    { 3.6f, false, RGB_PLUGIN_BREATHE,    88, 255, 220,  255 }, // Discharging, high
 };
 
 #define NUM_TIERS (sizeof(battery_rgb_tiers)/sizeof(battery_rgb_tiers[0]))
@@ -98,7 +98,8 @@ static void io_battery_task(void *arg)
         // 1. SEND RGB TIER MESSAGE
         // -----------------------------
         dispatcher_msg_t rgb_msg = {0};
-        rgb_msg.target = TARGET_RGB;
+        memset(rgb_msg.targets, TARGET_MAX, sizeof(rgb_msg.targets));
+        rgb_msg.targets[0] = TARGET_RGB;
         rgb_msg.source = SOURCE_UNDEFINED;
 
         const battery_rgb_tier_t* tier = battery_get_rgb_tier(voltage, vbus);
@@ -124,7 +125,8 @@ static void io_battery_task(void *arg)
         // 2. SEND USB TEXT MESSAGE
         // -----------------------------
         dispatcher_msg_t usb_msg = {0};
-        usb_msg.target = TARGET_USB;
+        memset(usb_msg.targets, TARGET_MAX, sizeof(usb_msg.targets));
+        usb_msg.targets[0] = TARGET_USB_CDC;
         usb_msg.source = SOURCE_UNDEFINED;
 
         usb_msg.message_len = snprintf(

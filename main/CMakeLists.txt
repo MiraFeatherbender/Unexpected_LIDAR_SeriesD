@@ -8,7 +8,9 @@ idf_component_register(
         "dispatcher.c"
 
         # Core plugin sources
+        "plugins/io_gpio.c"
         "plugins/io_usb.c"
+        #"plugins/io_usb_msc.c"
         "plugins/io_lidar.c"
         "plugins/io_rgb.c"
         "plugins/io_battery.c"

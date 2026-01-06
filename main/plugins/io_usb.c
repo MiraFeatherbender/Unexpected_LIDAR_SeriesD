@@ -29,7 +29,7 @@ void io_usb_init(void)
     usb_tx_queue = xQueueCreate(USB_TX_QUEUE_LEN, sizeof(dispatcher_msg_t));
 
     // Register with dispatcher
-    dispatcher_register_handler(TARGET_USB, io_usb_dispatcher_handler);
+    dispatcher_register_handler(TARGET_USB_CDC, io_usb_dispatcher_handler);
 
     // Start USB TX task
     xTaskCreate(io_usb_tx_task, "io_usb_tx_task", 4096, NULL, 9, NULL);
@@ -81,10 +81,11 @@ void tinyusb_cdc_rx_callback(int itf, cdcacm_event_t *event)
                                             BUF_SIZE - 1,
                                             &msg.message_len);
 
+        memset(msg.targets, TARGET_MAX, sizeof(msg.targets));
         if (ret == ESP_OK && msg.message_len > 0) {
 
-            msg.source = SOURCE_USB;
-            msg.target = TARGET_LIDAR_COORD;   // USB → LIDAR_COORD bridge
+            msg.source = SOURCE_USB_CDC;
+            msg.targets[0] = TARGET_LIDAR_COORD;   // USB → LIDAR_COORD bridge
 
             BaseType_t hp = pdFALSE;
             dispatcher_send_from_isr(&msg, &hp);
