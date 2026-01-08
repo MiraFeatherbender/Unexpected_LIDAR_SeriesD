@@ -9,8 +9,7 @@ idf_component_register(
 
         # Core plugin sources
         "plugins/io_gpio.c"
-        "plugins/io_usb_cdc.c"
-        "plugins/io_usb_msc.c"
+        "plugins/io_usb_cdc_msc.c"
         "plugins/io_lidar.c"
         "plugins/io_rgb.c"
         "plugins/io_battery.c"
