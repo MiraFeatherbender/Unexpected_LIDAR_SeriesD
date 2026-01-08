@@ -185,7 +185,7 @@ static void io_rgb_task(void *arg)
                     break;
                 case 0xA5:
                     // Override mode: force dedicated animation
-                    rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 85, 220, 140, 128);
+                    rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 80, 240, 100, 70);
                     break;
             }
         }
