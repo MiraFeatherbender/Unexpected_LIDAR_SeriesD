@@ -11,6 +11,7 @@
 
 typedef enum {
     SOURCE_USB_CDC,
+    SOURCE_USB_MSC,
     SOURCE_UART,
     SOURCE_LIDAR_IO,
     SOURCE_LIDAR_COORD,

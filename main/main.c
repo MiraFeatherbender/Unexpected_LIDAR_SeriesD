@@ -1,7 +1,7 @@
 #include "dispatcher.h"
 #include "UMSeriesD_idf.h"
+#include "io_usb_cdc_msc.h"
 #include "io_gpio.h"
-#include "io_usb.h"
 #include "io_lidar.h"
 #include "lidar_coordinator.h"
 #include "io_rgb.h"
@@ -17,7 +17,7 @@ void app_main(void)
 
     ums3_begin();
     dispatcher_init();
-    io_usb_init();
+    io_usb_cdc_msc_init();
     io_rgb_init();
     io_gpio_init();
     io_lidar_init();
@@ -32,3 +32,4 @@ void app_main(void)
 
     }
 }
+
