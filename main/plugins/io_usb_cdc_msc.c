@@ -245,7 +245,7 @@ void io_usb_cdc_msc_init(void)
     // --- USB CDC/MSC and tasks are disabled for testing. ---
     
     
-
+/*
     ESP_LOGI(TAG, "USB Composite initialization");
     const tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
@@ -275,6 +275,6 @@ void io_usb_cdc_msc_init(void)
     dispatcher_register_handler(TARGET_USB_CDC, io_usb_dispatcher_handler);
 
     ESP_LOGI(TAG, "USB Composite initialization DONE");
-    
+    */
 }
 

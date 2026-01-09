@@ -141,3 +141,13 @@ menu "Wi-Fi Access Point Settings"
         default ""
 
 endmenu
+
+menu "Wi-Fi Station (STA) Settings"
+    config WIFI_STA_SSID
+        string "Wi-Fi STA SSID"
+        default "TMOBILE-E178"
+
+    config WIFI_STA_PASSWORD
+        string "Wi-Fi STA Password"
+        default "YourPassword"
+endmenu
