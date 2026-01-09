@@ -24,57 +24,79 @@ static const char *get_mime_type(const char *filename) {
     return "application/octet-stream";
 }
 
-// Unified file handler for all GET requests
-static esp_err_t file_get_handler(httpd_req_t *req) {
-    char filepath[256];
-    // Check for ?file=... query parameter
-    char file_param[192] = {0};
-    esp_err_t found = httpd_req_get_url_query_str(req, file_param, sizeof(file_param));
-    char file_value[192] = {0};
-    if (found == ESP_OK && httpd_query_key_value(file_param, "file", file_value, sizeof(file_value)) == ESP_OK) {
-        snprintf(filepath, sizeof(filepath), "/data/%s", file_value);
-    } else {
-        // Serve index.html for root or fallback
-        snprintf(filepath, sizeof(filepath), "/data/index.html");
-    }
-    ESP_LOGI(TAG, "Requested URI: %s", req->uri);
-    ESP_LOGI(TAG, "Constructed filepath: %s", filepath);
+
+// Handler for serving index.html at root
+static uint8_t index_buf[2048];
+static esp_err_t index_get_handler(httpd_req_t *req) {
+    const char *filepath = "/data/index.html";
     struct stat st;
-    int stat_result = stat(filepath, &st);
-    ESP_LOGI(TAG, "stat() result: %d", stat_result);
-    if (stat_result != 0 || !S_ISREG(st.st_mode)) {
-        ESP_LOGW(TAG, "File not found or not regular: %s", filepath);
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+    if (stat(filepath, &st) != 0 || !S_ISREG(st.st_mode)) {
+        ESP_LOGW(TAG, "index.html not found");
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "index.html not found");
         return ESP_FAIL;
     }
-    static uint8_t buf[2048];
     FILE *f = fopen(filepath, "rb");
     if (!f) {
         ESP_LOGW(TAG, "fopen failed for: %s", filepath);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open index.html");
         return ESP_FAIL;
     }
     httpd_resp_set_type(req, get_mime_type(filepath));
     int total_bytes = 0;
     while (1) {
-        int bytes = fread(buf, 1, sizeof(buf), f);
+        int bytes = fread(index_buf, 1, sizeof(index_buf), f);
         if (bytes > 0) {
-            esp_err_t ret = httpd_resp_send_chunk(req, (const char *)buf, bytes);
+            esp_err_t ret = httpd_resp_send_chunk(req, (const char *)index_buf, bytes);
             if (ret != ESP_OK) {
-                ESP_LOGW(TAG, "httpd_resp_send_chunk failed: %d", ret);
                 fclose(f);
-                httpd_resp_send_chunk(req, NULL, 0); // End response
+                httpd_resp_send_chunk(req, NULL, 0);
                 return ESP_FAIL;
             }
             total_bytes += bytes;
         }
-        if (bytes < sizeof(buf)) {
-            break; // EOF or error
-        }
+        if (bytes < sizeof(index_buf)) break;
     }
     fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
     ESP_LOGI(TAG, "Sent %d bytes from %s", total_bytes, filepath);
-    httpd_resp_send_chunk(req, NULL, 0); // End response
+    return ESP_OK;
+}
+
+// Handler for serving files under /images/*
+static uint8_t image_buf[2048];
+static esp_err_t image_get_handler(httpd_req_t *req) {
+    char filepath[256];
+    snprintf(filepath, sizeof(filepath), "/data%s", req->uri); // e.g., /data/images/foo.bmp
+    struct stat st;
+    if (stat(filepath, &st) != 0 || !S_ISREG(st.st_mode)) {
+        ESP_LOGW(TAG, "Image file not found: %s", filepath);
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Image file not found");
+        return ESP_FAIL;
+    }
+    FILE *f = fopen(filepath, "rb");
+    if (!f) {
+        ESP_LOGW(TAG, "fopen failed for: %s", filepath);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open image file");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, get_mime_type(filepath));
+    int total_bytes = 0;
+    while (1) {
+        int bytes = fread(image_buf, 1, sizeof(image_buf), f);
+        if (bytes > 0) {
+            esp_err_t ret = httpd_resp_send_chunk(req, (const char *)image_buf, bytes);
+            if (ret != ESP_OK) {
+                fclose(f);
+                httpd_resp_send_chunk(req, NULL, 0);
+                return ESP_FAIL;
+            }
+            total_bytes += bytes;
+        }
+        if (bytes < sizeof(image_buf)) break;
+    }
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    ESP_LOGI(TAG, "Sent %d bytes from %s", total_bytes, filepath);
     return ESP_OK;
 }
 
@@ -83,15 +105,26 @@ void wifi_http_server_start(void)
     if (server) return;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 80;
+    config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
     ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
-        httpd_uri_t catchall_uri = {
+        // Handler for root (index.html)
+        httpd_uri_t index_uri = {
             .uri = "/",
             .method = HTTP_GET,
-            .handler = file_get_handler,
+            .handler = index_get_handler,
             .user_ctx = NULL
         };
-        httpd_register_uri_handler(server, &catchall_uri);
+        httpd_register_uri_handler(server, &index_uri);
+
+        // Handler for images (wildcard)
+        httpd_uri_t images_uri = {
+            .uri = "/images/*",
+            .method = HTTP_GET,
+            .handler = image_get_handler,
+            .user_ctx = NULL
+        };
+        httpd_register_uri_handler(server, &images_uri);
     } else {
         ESP_LOGE(TAG, "Failed to start HTTP server");
     }
