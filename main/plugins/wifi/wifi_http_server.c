@@ -99,6 +99,50 @@ static esp_err_t image_get_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Sent %d bytes from %s", total_bytes, filepath);
     return ESP_OK;
 }
+// Static buffer for uploads
+static uint8_t upload_buf[2048];
+
+// Handler for file uploads via /upload/*
+static esp_err_t upload_post_handler(httpd_req_t *req) {
+    char filepath[256];
+    // Extract filename from URI after /upload/
+    const char *uri = req->uri;
+    const char *filename = uri + strlen("/upload/");
+    if (strlen(filename) == 0 || strlen(filename) > 200) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
+        return ESP_FAIL;
+    }
+    snprintf(filepath, sizeof(filepath), "/data/%s", filename);
+    FILE *f = fopen(filepath, "wb");
+    if (!f) {
+        ESP_LOGW(TAG, "Failed to open for write: %s", filepath);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
+        return ESP_FAIL;
+    }
+    int remaining = req->content_len;
+    int total_bytes = 0;
+    while (remaining > 0) {
+        int to_read = remaining > sizeof(upload_buf) ? sizeof(upload_buf) : remaining;
+        int read = httpd_req_recv(req, (char *)upload_buf, to_read);
+        if (read <= 0) {
+            fclose(f);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file data");
+            return ESP_FAIL;
+        }
+        int written = fwrite(upload_buf, 1, read, f);
+        if (written != read) {
+            fclose(f);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write file data");
+            return ESP_FAIL;
+        }
+        total_bytes += written;
+        remaining -= read;
+    }
+    fclose(f);
+    ESP_LOGI(TAG, "Uploaded %d bytes to %s", total_bytes, filepath);
+    httpd_resp_sendstr(req, "File uploaded successfully");
+    return ESP_OK;
+}
 
 void wifi_http_server_start(void)
 {
@@ -125,6 +169,15 @@ void wifi_http_server_start(void)
             .user_ctx = NULL
         };
         httpd_register_uri_handler(server, &images_uri);
+
+        // Handler for uploads (wildcard)
+        httpd_uri_t upload_uri = {
+            .uri = "/upload/*",
+            .method = HTTP_POST,
+            .handler = upload_post_handler,
+            .user_ctx = NULL
+        };
+        httpd_register_uri_handler(server, &upload_uri);
     } else {
         ESP_LOGE(TAG, "Failed to start HTTP server");
     }
