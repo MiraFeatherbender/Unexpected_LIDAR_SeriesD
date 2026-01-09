@@ -1,6 +1,7 @@
 # Automatically collect all animation source files
 file(GLOB RGB_ANIMATION_SOURCES "plugins/rgb/*.c")
 file(GLOB LIDAR_SOURCES "plugins/RPLIDAR/*.c")
+#file(GLOB WIFI_SOURCES "plugins/wifi/*.c")
 
 idf_component_register(
     SRCS
@@ -14,6 +15,7 @@ idf_component_register(
         "plugins/io_rgb.c"
         "plugins/io_battery.c"
         "plugins/io_wifi_ap.c"
+        "plugins/io_fatfs.c"
 
         # Animation sources (auto-discovered)
         ${RGB_ANIMATION_SOURCES}
@@ -21,11 +23,15 @@ idf_component_register(
         # LIDAR sources (auto-discovered)
         ${LIDAR_SOURCES}
 
+        # WiFi sources
+        "plugins/wifi/wifi_http_server.c"
+
         # Library sources
         "src/UMSeriesD_idf.c"
 
     REQUIRES
         esp_wifi
+        esp_http_server
         esp_netif
         esp_event
         nvs_flash
@@ -43,6 +49,7 @@ idf_component_register(
         "plugins"         # io_*.h
         "plugins/rgb"     # rgb_anim*.h
         "plugins/RPLIDAR" # lidar_*.h
+        "plugins/wifi"    # wifi_*.h
         "src"             # UMSeriesD_idf.h
 )
 

@@ -84,8 +84,8 @@ static bool file_exists(const char *file_path)
 
 static void file_operations(void)
 {
-    const char *directory = "/data/esp";
-    const char *file_path = "/data/esp/test.txt";
+    const char *directory = "/data";
+    const char *file_path = "/data/test.txt";
 
     struct stat s = {0};
     bool directory_exists = stat(directory, &s) == 0;
@@ -122,6 +122,21 @@ static void file_operations(void)
         *pos = '\0';
     }
     ESP_LOGI(TAG, "Read from file: '%s'", line);
+}
+
+static void log_data_directory_files(void)
+{
+    DIR *dir = opendir("/data");
+    if (!dir) {
+        ESP_LOGE(TAG, "Failed to open /data directory");
+        return;
+    }
+    ESP_LOGI(TAG, "Files in /data:");
+    struct dirent *entry;
+    while ((entry = readdir(dir))) {
+        ESP_LOGI(TAG, "  %s", entry->d_name);
+    }
+    closedir(dir);
 }
 
 static esp_err_t storage_init_spiflash(wl_handle_t *wl_handle)
@@ -180,7 +195,7 @@ static void msc_event_cb(tinyusb_msc_storage_handle_t handle, tinyusb_msc_event_
 }
 
 // MSC state helpers
-static bool io_usb_msc_is_enabled(void) { return msc_enabled; }
+bool io_usb_msc_is_enabled(void) { return msc_enabled; }
 static void io_usb_msc_enable(void) {
     if (!msc_enabled) {
         tinyusb_msc_set_storage_mount_point(storage_hdl, TINYUSB_MSC_STORAGE_MOUNT_USB);
@@ -215,7 +230,7 @@ static void io_usb_msc_task(void *arg)
 // Call this from your main to initialize USB CDC+MSC
 void io_usb_cdc_msc_init(void)
 {
-    ESP_LOGI(TAG, "Initializing storage...");
+    ESP_LOGI(TAG, "Initializing storage (FATFS only)...");
     ESP_ERROR_CHECK(storage_init_spiflash(&wl_handle));
 
     const tinyusb_msc_storage_config_t storage_cfg = {
@@ -224,9 +239,12 @@ void io_usb_cdc_msc_init(void)
         .fat_fs = { .base_path = BASE_PATH },
     };
     ESP_ERROR_CHECK(tinyusb_msc_new_storage_spiflash(&storage_cfg, &storage_hdl));
-
-    // Do file operations before enabling USB MSC for host
     file_operations();
+    log_data_directory_files();
+
+    // --- USB CDC/MSC and tasks are disabled for testing. ---
+    
+    
 
     ESP_LOGI(TAG, "USB Composite initialization");
     const tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
@@ -257,5 +275,6 @@ void io_usb_cdc_msc_init(void)
     dispatcher_register_handler(TARGET_USB_CDC, io_usb_dispatcher_handler);
 
     ESP_LOGI(TAG, "USB Composite initialization DONE");
+    
 }
 

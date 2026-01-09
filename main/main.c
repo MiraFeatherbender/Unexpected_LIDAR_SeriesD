@@ -25,7 +25,7 @@ void app_main(void)
     ums3_set_antenna_external(CONFIG_UM_ANTENNA_EXTERNAL);
 #endif
     dispatcher_init();
-    // io_usb_cdc_msc_init();
+    io_usb_cdc_msc_init();
     io_rgb_init();
     io_gpio_init();
     io_lidar_init();
