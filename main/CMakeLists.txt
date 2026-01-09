@@ -13,6 +13,7 @@ idf_component_register(
         "plugins/io_lidar.c"
         "plugins/io_rgb.c"
         "plugins/io_battery.c"
+        "plugins/io_wifi_ap.c"
 
         # Animation sources (auto-discovered)
         ${RGB_ANIMATION_SOURCES}
@@ -24,6 +25,10 @@ idf_component_register(
         "src/UMSeriesD_idf.c"
 
     REQUIRES
+        esp_wifi
+        esp_netif
+        esp_event
+        nvs_flash
         esp_driver_uart
         esp_driver_gpio
         esp_adc

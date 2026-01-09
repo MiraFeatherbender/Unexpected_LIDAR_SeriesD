@@ -8,16 +8,24 @@
 #include "io_battery.h"
 #include "rgb_anim.h"
 #include "rgb_anim_all.h"
+
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+#include "plugins/io_wifi_ap.h"
+
+
 
 void app_main(void)
 {
 
     ums3_begin();
+#ifdef CONFIG_UM_ANTENNA_EXTERNAL
+    ums3_set_antenna_external(CONFIG_UM_ANTENNA_EXTERNAL);
+#endif
     dispatcher_init();
-    io_usb_cdc_msc_init();
+    // io_usb_cdc_msc_init();
     io_rgb_init();
     io_gpio_init();
     io_lidar_init();
@@ -25,11 +33,10 @@ void app_main(void)
     rgb_anim_init_all();
     io_battery_init();
 
+    // Start Wi-Fi AP
+    io_wifi_ap_init();
 
     while (1) {
-
         vTaskDelay(pdMS_TO_TICKS(1000));
-
     }
 }
-

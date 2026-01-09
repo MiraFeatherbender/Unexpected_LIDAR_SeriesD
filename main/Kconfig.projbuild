@@ -54,6 +54,12 @@ menu "UM Series[D] Board Configuration"
         int
         default 13 if UM_BOARD_FEATHERS3
 
+    config UM_ANTENNA_EXTERNAL
+        bool "Use external antenna (RF switch high)"
+        default false
+        help
+            If enabled, sets the RF switch to use the external antenna. If disabled, uses the onboard antenna.
+
 endmenu
 
 menu "Echo Example Configuration"
@@ -99,5 +105,39 @@ menu "Echo Example Configuration"
         default 3072
         help
             Defines stack size for UART echo example. Insufficient stack size can cause crash.
+
+endmenu
+
+menu "Wi-Fi Access Point Settings"
+    config WIFI_AP_SSID
+        string "Wi-Fi AP SSID"
+        default "ESP32_AP"
+
+    config WIFI_AP_CHANNEL
+        int "Wi-Fi AP Channel"
+        range 1 13
+        default 6
+
+    config WIFI_AP_MAX_CONN
+        int "Max Connections"
+        range 1 10
+        default 4
+
+    choice
+        prompt "Wi-Fi AP Auth Mode"
+        default WIFI_AUTH_OPEN
+        config WIFI_AUTH_OPEN
+            bool "Open (no password)"
+        config WIFI_AUTH_WPA_PSK
+            bool "WPA-PSK"
+        config WIFI_AUTH_WPA2_PSK
+            bool "WPA2-PSK"
+        config WIFI_AUTH_WPA_WPA2_PSK
+            bool "WPA/WPA2-PSK"
+    endchoice
+
+    config WIFI_AP_PASSWORD
+        string "Wi-Fi AP Password (if required)"
+        default ""
 
 endmenu
