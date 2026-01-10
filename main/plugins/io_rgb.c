@@ -3,6 +3,8 @@
 #include "UMSeriesD_idf.h"
 #include "rgb_anim.h"
 #include "rest_context.h"
+#include "cJSON.h"
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -155,12 +157,67 @@ void io_rgb_init(void)
                 NULL);
 }
 
+
+
 static uint64_t priority = 0; // Bitfield to track message source priority
+
+// Helper: Generate self-describing RGB JSON for REST GET
+static void io_rgb_generate_json(rest_json_request_t *req) {
+    cJSON *root = cJSON_CreateObject();
+
+    // Plugin info
+    cJSON *plugin = cJSON_CreateObject();
+    cJSON_AddNumberToObject(plugin, "id", last_plugin_id);
+    cJSON_AddStringToObject(plugin, "name", rgb_plugin_names[last_plugin_id]);
+    cJSON_AddItemToObject(root, "plugin", plugin);
+
+    // Plugins array
+    cJSON *plugins = cJSON_CreateArray();
+    for (int i = 0; i < RGB_PLUGIN_MAX; ++i) {
+        cJSON *p = cJSON_CreateObject();
+        cJSON_AddNumberToObject(p, "id", i);
+        cJSON_AddStringToObject(p, "name", rgb_plugin_names[i]);
+        cJSON_AddItemToArray(plugins, p);
+    }
+    cJSON_AddItemToObject(root, "plugins", plugins);
+
+    // Fields array (using X-Macro)
+    cJSON *fields = cJSON_CreateArray();
+    #define X_FIELD_HSV(name, ctype, jtype, desc) { \
+        cJSON *f = cJSON_CreateObject(); \
+        cJSON_AddStringToObject(f, "name", #name); \
+        cJSON_AddNumberToObject(f, "value", current_hsv.name); \
+        cJSON_AddStringToObject(f, "type", jtype); \
+        cJSON_AddStringToObject(f, "desc", desc); \
+        cJSON_AddItemToArray(fields, f); \
+    }
+    #define X_FIELD_B(name, ctype, jtype, desc) { \
+        cJSON *f = cJSON_CreateObject(); \
+        cJSON_AddStringToObject(f, "name", #name); \
+        cJSON_AddNumberToObject(f, "value", current_brightness); \
+        cJSON_AddStringToObject(f, "type", jtype); \
+        cJSON_AddStringToObject(f, "desc", desc); \
+        cJSON_AddItemToArray(fields, f); \
+    }
+    #include "io_rgb.def"
+    #undef X_FIELD_B
+    #undef X_FIELD_HSV
+    cJSON_AddItemToObject(root, "fields", fields);
+
+    // Print to buffer
+    char *json_str = cJSON_PrintUnformatted(root);
+    size_t len = strlen(json_str);
+    if (len < req->buf_size) {
+        memcpy(req->json_buf, json_str, len + 1);
+        if (req->json_len) *req->json_len = len;
+    }
+    cJSON_free(json_str);
+    cJSON_Delete(root);
+}
 
 static void io_rgb_task(void *arg)
 {
     dispatcher_msg_t msg = {0};
-    static uint8_t button_state = 0x5A; // Default to 'on' at startup
 
     // while (1) {
     //     if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
@@ -204,7 +261,27 @@ static void io_rgb_task(void *arg)
 
             switch (msg.source) {
                 case SOURCE_REST:
-                    // REST GET/POST logic here (not implemented in this snippet)
+                    if (msg.context) {
+                        rest_json_request_t *req = (rest_json_request_t *)msg.context;
+                        io_rgb_generate_json(req);
+                        xSemaphoreGive(req->sem);
+                    }
+                    else {
+                        // REST command to change RGB
+                        if (msg.message_len >= 5) {
+                            uint8_t plugin_id = msg.data[0];
+                            uint8_t h = msg.data[1];
+                            uint8_t s = msg.data[2];
+                            uint8_t v = msg.data[3];
+                            uint8_t brightness = msg.data[4];
+                            rgb_set_animation(plugin_id, h, s, v, brightness);
+                        }
+                        if(msg.data[0] == RGB_PLUGIN_OFF) {
+                            // Clear priority for REST if turning off
+                            priority &= ~(1ULL << SOURCE_REST);
+                            vTaskDelay(pdMS_TO_TICKS(5000)); // delay to ensure OFF is processed
+                        }
+                    }
                     break;
                 case SOURCE_USB_MSC:
                 case SOURCE_MSC_BUTTON: 
@@ -221,7 +298,7 @@ static void io_rgb_task(void *arg)
                     break;
 
                 default:
-                    if (button_state == 0x5A && msg.message_len >= 5) {
+                    if (msg.message_len >= 5) {
                         uint8_t plugin_id = msg.data[0];
                         uint8_t h = msg.data[1];
                         uint8_t s = msg.data[2];

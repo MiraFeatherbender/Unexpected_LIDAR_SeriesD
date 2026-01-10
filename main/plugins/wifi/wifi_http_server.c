@@ -161,12 +161,49 @@ static esp_err_t dispatch_from_rest(const httpd_req_t *req, void *user_ctx, cons
     return ESP_OK;
 }
 
+static esp_err_t json_get_handler(httpd_req_t *req) {
+    char buf[1024];
+    rest_json_request_t rest_ctx = {
+        .json_buf = buf,
+        .buf_size = sizeof(buf),
+        .json_len = NULL,
+        .sem = xSemaphoreCreateBinary(),
+        .user_data = NULL
+    };
+    size_t json_len = 0;
+    rest_ctx.json_len = &json_len;
 
+    // Use the endpoint's user_ctx as the target
+    void *target = req->user_ctx;
+    if (!target) {
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No target for JSON GET");
+        vSemaphoreDelete(rest_ctx.sem);
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = dispatch_from_rest(req, target, &rest_ctx, sizeof(rest_ctx));
+    if (err != ESP_OK) {
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Dispatch failed");
+        vSemaphoreDelete(rest_ctx.sem);
+        return ESP_FAIL;
+    }
+
+    // Wait for the JSON to be generated (timeout: 1s)
+    if (xSemaphoreTake(rest_ctx.sem, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Timeout waiting for JSON");
+        vSemaphoreDelete(rest_ctx.sem);
+        return ESP_FAIL;
+    }
+
+    vSemaphoreDelete(rest_ctx.sem);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, rest_ctx.json_buf, json_len);
+    return ESP_OK;
+}
 
 static esp_err_t rgb_handler(httpd_req_t *req) {
     switch(req->method) {
         case HTTP_GET:
-            // Handle RGB GET request here
             break;
         case HTTP_POST: {
             char buf[128];
