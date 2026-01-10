@@ -1,0 +1,3 @@
+X_REST_ENDPOINT("/api/rgb", HTTP_GET, rgb_handler, NULL)
+X_REST_ENDPOINT("/api/rgb", HTTP_POST, rgb_handler, TARGET_RGB)
+

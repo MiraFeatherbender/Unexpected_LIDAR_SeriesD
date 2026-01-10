@@ -41,6 +41,7 @@ typedef struct {
     dispatch_target_t targets[TARGET_MAX];
     size_t message_len;
     uint8_t data[BUF_SIZE];
+    void *context; // optional context pointer
 } dispatcher_msg_t;
 
 typedef void (*dispatcher_handler_t)(const dispatcher_msg_t *msg);

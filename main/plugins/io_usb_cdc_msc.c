@@ -212,7 +212,7 @@ static void io_usb_msc_disable(void) {
 // MSC task — toggles MSC state on every button event
 static void io_usb_msc_task(void *arg)
 {
-    dispatcher_msg_t msg;
+    dispatcher_msg_t msg = {0};
     while (1) {
         if (xQueueReceive(msc_tx_queue, &msg, portMAX_DELAY) == pdTRUE) {
             // Toggle MSC state on any valid button event

@@ -46,7 +46,7 @@ void dispatcher_register_handler(dispatch_target_t target,
 
 static void dispatcher_task(void *arg)
 {
-    dispatcher_msg_t msg;
+    dispatcher_msg_t msg = {0};
     while (1) {
         // Wait for incoming messages
         if (xQueueReceive(dispatcher_queue, &msg, portMAX_DELAY) == pdTRUE) {

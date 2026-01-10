@@ -156,7 +156,7 @@ void io_rgb_init(void)
 
 static void io_rgb_task(void *arg)
 {
-    dispatcher_msg_t msg;
+    dispatcher_msg_t msg = {0};
     static uint8_t button_state = 0x5A; // Default to 'on' at startup
 
     while (1) {

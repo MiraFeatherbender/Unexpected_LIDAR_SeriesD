@@ -172,7 +172,8 @@ void io_gpio_event_task(void *arg) {
             dispatcher_msg_t dmsg = {
                 .source = msg.source_id,
                 .message_len = 1,
-                .data = { msg.state }
+                .data = { msg.state },
+                .context = NULL
             };
             memcpy(dmsg.targets, msg.target_id, sizeof(dmsg.targets));
             dispatcher_send(&dmsg);

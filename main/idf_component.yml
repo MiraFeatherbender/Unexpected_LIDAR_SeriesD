@@ -8,3 +8,4 @@ dependencies:
   espressif/mdns:
     version: "*"
   idf: "^5.0"
+  cjson: "^1.0.0"

@@ -1,0 +1,8 @@
+// io_rgb.def - X-Macro field list for RGB command messages
+// Order must match .data field usage: plugin, h, s, v, b
+// name,      c_type,   json_type, description
+X_FIELD_HSV(h,         uint8_t, "uint8",  "Hue (0-255)")
+X_FIELD_HSV(s,         uint8_t, "uint8",  "Saturation (0-255)")
+X_FIELD_HSV(v,         uint8_t, "uint8",  "Value/Brightness (0-255)")
+X_FIELD_B(b,         uint8_t, "uint8",  "Master brightness (0-255)")
+

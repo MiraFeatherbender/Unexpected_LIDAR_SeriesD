@@ -102,7 +102,7 @@ void io_lidar_event_task(void *arg)
 // TX task — sends data OUT over UART
 static void io_lidar_tx_task(void *arg)
 {
-    dispatcher_msg_t msg;
+    dispatcher_msg_t msg = {0};
 
     while (1) {
         if (xQueueReceive(uart_tx_queue, &msg, portMAX_DELAY) == pdTRUE) {

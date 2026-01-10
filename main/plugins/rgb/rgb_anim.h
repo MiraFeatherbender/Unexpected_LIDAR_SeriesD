@@ -23,21 +23,41 @@ static const char * const rgb_plugin_names[] = {
 // ---------------------------------------------------------
 // HSV color struct (0-255 range for each channel)
 // ---------------------------------------------------------
+// typedef struct {
+//     uint8_t h; // Hue (0-255)
+//     uint8_t s; // Saturation (0-255)
+//     uint8_t v; // Value/Brightness (0-255)
+// } hsv_color_t;
+
+// // ---------------------------------------------------------
+// // Plugin interface (unified for ALL animations)
+// // Updated: step() receives pointer to HSV output
+// // ---------------------------------------------------------
+// typedef struct {
+//     void (*begin)(void);                        // reset internal state
+//     void (*step)(hsv_color_t *out_hsv);         // run one animation frame, output HSV
+//     void (*set_color)(hsv_color_t hsv);         // every plugin receives color in HSV
+//     void (*set_brightness)(uint8_t b);          // every plugin receives brightness
+// } rgb_anim_t;
+
+
 typedef struct {
-    uint8_t h; // Hue (0-255)
-    uint8_t s; // Saturation (0-255)
-    uint8_t v; // Value/Brightness (0-255)
+    #define X_FIELD_HSV(name, ctype, jtype, desc) ctype name;
+    #define X_FIELD_B(name, ctype, jtype, desc);
+    #include "io_rgb.def"
+    #undef X_FIELD_B
+    #undef X_FIELD_HSV
 } hsv_color_t;
 
-// ---------------------------------------------------------
-// Plugin interface (unified for ALL animations)
-// Updated: step() receives pointer to HSV output
-// ---------------------------------------------------------
 typedef struct {
     void (*begin)(void);                        // reset internal state
     void (*step)(hsv_color_t *out_hsv);         // run one animation frame, output HSV
-    void (*set_color)(hsv_color_t hsv);         // every plugin receives color in HSV
-    void (*set_brightness)(uint8_t b);          // every plugin receives brightness
+    void (*set_color)(hsv_color_t hsv);         // every plugin receives color in
+    #define X_FIELD_HSV(name, ctype, jtype, desc);
+    #define X_FIELD_B(name, ctype, jtype, desc) void (*set_brightness)(ctype name);          // every plugin receives brightness
+    #include "io_rgb.def"
+    #undef X_FIELD_B
+    #undef X_FIELD_HSV
 } rgb_anim_t;
 
 // ---------------------------------------------------------
