@@ -10,24 +10,31 @@
 // enums and structs for communication state and context
 
 typedef enum {
-    SOURCE_USB_CDC,
-    SOURCE_USB_MSC,
-    SOURCE_UART,
-    SOURCE_LIDAR_IO,
-    SOURCE_LIDAR_COORD,
-    SOURCE_MSC_BUTTON,
-    SOURCE_LINE_SENSOR,
+#define X_MODULE(name) TARGET##name,
+#include "modules.def"
+#undef X_MODULE
+    TARGET_MAX
+} dispatch_target_t;
+
+static const char * const target_names[] = {
+#define X_MODULE(name) "TARGET" #name,
+#include "modules.def"
+#undef X_MODULE
+};
+
+typedef enum {
+#define X_MODULE(name) SOURCE##name,
+#include "modules.def"
+#undef X_MODULE
     SOURCE_UNDEFINED
 } dispatch_source_t;
 
-typedef enum {
-    TARGET_USB_CDC,
-    TARGET_USB_MSC,
-    TARGET_RGB,
-    TARGET_LIDAR_IO,
-    TARGET_LIDAR_COORD,
-    TARGET_MAX
-} dispatch_target_t;
+static const char * const source_names[] = {
+#define X_MODULE(name) "SOURCE" #name,
+#include "modules.def"
+#undef X_MODULE
+};
+
 
 typedef struct {
     dispatch_source_t source;

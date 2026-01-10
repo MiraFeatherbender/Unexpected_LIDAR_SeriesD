@@ -157,7 +157,7 @@ void io_rgb_init(void)
 static void io_rgb_task(void *arg)
 {
     dispatcher_msg_t msg;
-    static uint8_t button_state = 0xA5; // Default to 'on' at startup
+    static uint8_t button_state = 0x5A; // Default to 'on' at startup
 
     while (1) {
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {

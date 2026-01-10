@@ -6,17 +6,19 @@
 // ---------------------------------------------------------
 // Plugin ID enum (mirrors dispatcher target enum pattern)
 // ---------------------------------------------------------
+
 typedef enum {
-    RGB_PLUGIN_OFF = 0,
-    RGB_PLUGIN_SOLID,
-    RGB_PLUGIN_FIRE,
-    RGB_PLUGIN_AURORA,
-    RGB_PLUGIN_WATER,
-    RGB_PLUGIN_HEARTBEAT,
-    RGB_PLUGIN_BREATHE,
-    
+#define X_RGB_PLUGIN(name) RGB_PLUGIN##name,
+#include "rgb_plugins.def"
+#undef X_RGB_PLUGIN
     RGB_PLUGIN_MAX   // <-- always last, auto-sizes registry
 } rgb_plugin_id_t;
+
+static const char * const rgb_plugin_names[] = {
+#define X_RGB_PLUGIN(name) "RGB_PLUGIN" #name,
+#include "rgb_plugins.def"
+#undef X_RGB_PLUGIN
+};
 
 // ---------------------------------------------------------
 // HSV color struct (0-255 range for each channel)
