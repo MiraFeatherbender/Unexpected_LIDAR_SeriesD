@@ -1,6 +1,9 @@
 #include "wifi_http_server.h"
 #include "io_fatfs.h"
 #include "dispatcher.h"
+#include "rest_context.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdint.h>

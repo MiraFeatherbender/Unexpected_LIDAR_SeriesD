@@ -2,10 +2,11 @@
 #include "dispatcher.h"
 #include "UMSeriesD_idf.h"
 #include "rgb_anim.h"
-
+#include "rest_context.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 
 #define RGB_CMD_QUEUE_LEN 10
 #define RGB_TASK_STACK_SIZE 4096
@@ -154,27 +155,73 @@ void io_rgb_init(void)
                 NULL);
 }
 
+static uint64_t priority = 0; // Bitfield to track message source priority
+
 static void io_rgb_task(void *arg)
 {
     dispatcher_msg_t msg = {0};
     static uint8_t button_state = 0x5A; // Default to 'on' at startup
 
+    // while (1) {
+    //     if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
+    //         // Always capture button state if present
+    //         if ((msg.source == SOURCE_USB_MSC || msg.source == SOURCE_MSC_BUTTON) && msg.message_len >= 1) {
+    //             uint8_t prev_button_state = button_state;
+    //             button_state = msg.data[0];
+    //             if (button_state == 0xA5 && prev_button_state == 0x5A) {
+    //                 rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 190, 220, 140, 64);
+    //             }
+    //         }
+
+    //         switch (button_state) {
+    //             case 0x5A:
+    //                 // Normal mode: process animation messages
+    //                 if (msg.source != SOURCE_MSC_BUTTON && msg.message_len >= 5) {
+    //                     uint8_t plugin_id = msg.data[0];
+    //                     uint8_t h = msg.data[1];
+    //                     uint8_t s = msg.data[2];
+    //                     uint8_t v = msg.data[3];
+    //                     uint8_t brightness = msg.data[4];
+    //                     rgb_set_animation(plugin_id, h, s, v, brightness);
+    //                 }
+    //                 break;
+    //             case 0xA5:
+    //                 // Override mode: force dedicated animation
+    //                 rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 80, 240, 100, 70);
+    //                 break;
+    //         }
+    //     }
+
+
     while (1) {
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
-            // Always capture button state if present
-            if ((msg.source == SOURCE_USB_MSC || msg.source == SOURCE_MSC_BUTTON) && msg.message_len >= 1) {
-                uint8_t prev_button_state = button_state;
-                button_state = msg.data[0];
-                if (button_state == 0xA5 && prev_button_state == 0x5A) {
-                    // Restore last animation immediately
-                    rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 190, 220, 140, 64);
-                }
+            priority |= (1ULL << msg.source);
+
+            if ((priority >> (msg.source + 1)) != 0) {
+                // Higher priority source active, ignore this message
+                continue;
             }
 
-            switch (button_state) {
-                case 0x5A:
-                    // Normal mode: process animation messages
-                    if (msg.source != SOURCE_MSC_BUTTON && msg.message_len >= 5) {
+            switch (msg.source) {
+                case SOURCE_REST:
+                    // REST GET/POST logic here (not implemented in this snippet)
+                    break;
+                case SOURCE_USB_MSC:
+                case SOURCE_MSC_BUTTON: 
+                    if (msg.message_len >= 1) {
+                        if (msg.data[0] == 0xA5) {
+                            // Assert override for both sources
+                            priority |= (1ULL << SOURCE_USB_MSC) | (1ULL << SOURCE_MSC_BUTTON);
+                            rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 190, 220, 140, 64);
+                        } else if (msg.data[0] == 0x5A) {
+                            // Release override for both sources
+                            priority &= ~((1ULL << SOURCE_USB_MSC) | (1ULL << SOURCE_MSC_BUTTON));
+                        }
+                    }
+                    break;
+
+                default:
+                    if (button_state == 0x5A && msg.message_len >= 5) {
                         uint8_t plugin_id = msg.data[0];
                         uint8_t h = msg.data[1];
                         uint8_t s = msg.data[2];
@@ -182,10 +229,6 @@ static void io_rgb_task(void *arg)
                         uint8_t brightness = msg.data[4];
                         rgb_set_animation(plugin_id, h, s, v, brightness);
                     }
-                    break;
-                case 0xA5:
-                    // Override mode: force dedicated animation
-                    rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 80, 240, 100, 70);
                     break;
             }
         }
