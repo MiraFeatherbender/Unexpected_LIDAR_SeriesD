@@ -5,12 +5,13 @@
 #include "rest_context.h"
 #include "cJSON.h"
 #include <string.h>
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 
-#define RGB_CMD_QUEUE_LEN 10
+#define RGB_CMD_QUEUE_LEN 32
 #define RGB_TASK_STACK_SIZE 4096
 #define RGB_TASK_PRIORITY 5
 
@@ -132,8 +133,16 @@ static void io_rgb_task(void *arg);
 // Dispatcher handler — messages routed TO RGB
 static void io_rgb_dispatcher_handler(const dispatcher_msg_t *msg)
 {
-    // Non-blocking enqueue
-    xQueueSend(rgb_cmd_queue, msg, 0);
+    // ESP_LOGI("io_rgb", "xQueueSend: source=%d, context=%p", msg->source, msg->context);
+    if (xQueueSend(rgb_cmd_queue, msg, 0) != pdTRUE) {
+        ESP_LOGW("io_rgb", "xQueueSend FAILED: source=%d, context=%p", msg->source, msg->context);
+        // If queue is full and this is a REST GET, signal failure immediately
+        if (msg->source == SOURCE_REST && msg->context) {
+            rest_json_request_t *req = (rest_json_request_t *)msg->context;
+            ESP_LOGW("io_rgb", "Giving semaphore immediately due to queue full (REST GET)");
+            if (req->sem) xSemaphoreGive(req->sem);
+        }
+    }
 }
 
 void io_rgb_init(void)
@@ -181,15 +190,15 @@ static void io_rgb_generate_json(rest_json_request_t *req) {
     }
     cJSON_AddItemToObject(root, "plugins", plugins);
 
-    // Fields array (using X-Macro)
-    cJSON *fields = cJSON_CreateArray();
+    // parameters array (using X-Macro)
+    cJSON *parameters = cJSON_CreateArray();
     #define X_FIELD_HSV(name, ctype, jtype, desc) { \
         cJSON *f = cJSON_CreateObject(); \
         cJSON_AddStringToObject(f, "name", #name); \
         cJSON_AddNumberToObject(f, "value", current_hsv.name); \
         cJSON_AddStringToObject(f, "type", jtype); \
         cJSON_AddStringToObject(f, "desc", desc); \
-        cJSON_AddItemToArray(fields, f); \
+        cJSON_AddItemToArray(parameters, f); \
     }
     #define X_FIELD_B(name, ctype, jtype, desc) { \
         cJSON *f = cJSON_CreateObject(); \
@@ -197,12 +206,12 @@ static void io_rgb_generate_json(rest_json_request_t *req) {
         cJSON_AddNumberToObject(f, "value", current_brightness); \
         cJSON_AddStringToObject(f, "type", jtype); \
         cJSON_AddStringToObject(f, "desc", desc); \
-        cJSON_AddItemToArray(fields, f); \
+        cJSON_AddItemToArray(parameters, f); \
     }
     #include "io_rgb.def"
     #undef X_FIELD_B
     #undef X_FIELD_HSV
-    cJSON_AddItemToObject(root, "fields", fields);
+    cJSON_AddItemToObject(root, "parameters", parameters);
 
     // Print to buffer
     char *json_str = cJSON_PrintUnformatted(root);
@@ -219,36 +228,6 @@ static void io_rgb_task(void *arg)
 {
     dispatcher_msg_t msg = {0};
 
-    // while (1) {
-    //     if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
-    //         // Always capture button state if present
-    //         if ((msg.source == SOURCE_USB_MSC || msg.source == SOURCE_MSC_BUTTON) && msg.message_len >= 1) {
-    //             uint8_t prev_button_state = button_state;
-    //             button_state = msg.data[0];
-    //             if (button_state == 0xA5 && prev_button_state == 0x5A) {
-    //                 rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 190, 220, 140, 64);
-    //             }
-    //         }
-
-    //         switch (button_state) {
-    //             case 0x5A:
-    //                 // Normal mode: process animation messages
-    //                 if (msg.source != SOURCE_MSC_BUTTON && msg.message_len >= 5) {
-    //                     uint8_t plugin_id = msg.data[0];
-    //                     uint8_t h = msg.data[1];
-    //                     uint8_t s = msg.data[2];
-    //                     uint8_t v = msg.data[3];
-    //                     uint8_t brightness = msg.data[4];
-    //                     rgb_set_animation(plugin_id, h, s, v, brightness);
-    //                 }
-    //                 break;
-    //             case 0xA5:
-    //                 // Override mode: force dedicated animation
-    //                 rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 80, 240, 100, 70);
-    //                 break;
-    //         }
-    //     }
-
 
     while (1) {
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
@@ -263,10 +242,12 @@ static void io_rgb_task(void *arg)
                 case SOURCE_REST:
                     if (msg.context) {
                         rest_json_request_t *req = (rest_json_request_t *)msg.context;
+                        ESP_LOGI("io_rgb", "SOURCE_REST: GET context path entered, context=%p, sem=%p", msg.context, req->sem);
                         io_rgb_generate_json(req);
                         xSemaphoreGive(req->sem);
                     }
                     else {
+                        ESP_LOGI("io_rgb", "SOURCE_REST: COMMAND path entered, context=NULL, msg.data[0]=%d, msg.data[1]=%d, msg.data[2]=%d, msg.data[3]=%d, msg.data[4]=%d, msg_len=%d", msg.data[0], msg.data[1], msg.data[2], msg.data[3], msg.data[4], msg.message_len);
                         // REST command to change RGB
                         if (msg.message_len >= 5) {
                             uint8_t plugin_id = msg.data[0];

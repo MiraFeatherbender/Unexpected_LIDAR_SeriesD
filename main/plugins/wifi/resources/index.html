@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BMP Image Preview</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #222; color: #eee; text-align: center; }
+        .img-container { display: flex; justify-content: center; gap: 2em; margin-top: 2em; }
+        img { border: 2px solid #444; background: #111; max-width: 320px; max-height: 320px; }
+        h1 { margin-top: 1em; }
+    </style>
+</head>
+<body>
+    <h1>BMP Image Preview</h1>
+
+        <div class="img-container">
+            <div class="bmp-drop-target" data-filename="images/openSimplex2.bmp"
+                 ondragover="event.preventDefault()"
+                 ondrop="handleDrop(event, this)">
+                <h2>openSimplex2.bmp</h2>
+                <img src="images/openSimplex2.bmp" alt="openSimplex2 BMP">
+                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag BMP here to replace</div>
+            </div>
+            <div class="bmp-drop-target" data-filename="images/perlinNoise.bmp"
+                 ondragover="event.preventDefault()"
+                 ondrop="handleDrop(event, this)">
+                <h2>perlinNoise.bmp</h2>
+                <img src="images/perlinNoise.bmp" alt="perlinNoise BMP">
+                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag BMP here to replace</div>
+            </div>
+            <!-- New RGB UI Panel -->
+            <div id="rgb-ui-panel" style="background:#181818; border-radius:12px; padding:1.5em; min-width:340px; max-width:360px; display:flex; flex-direction:column; align-items:center; margin-left:2em;">
+                <div id="color-preview" style="width:48px; height:48px; border-radius:50%; border:1px solid #ccc; margin-bottom:1em;"></div>
+                <div id="picker-container"></div>
+                <div id="hsv-values" style="margin-bottom:1em;"></div>
+                <div style="margin-top:1em; width:100%;">
+                    <h3 style="margin-bottom:0.5em; color:#eee; font-size:1em;">Brightness</h3>
+                    <div id="b-slider-container"></div>
+                    <div id="b-value" style="margin-top:0.5em; font-size:1.1em;"></div>
+                </div>
+                <div style="margin-top:1.5em; width:100%;">
+                    <label for="animation-dropdown" style="color:#eee;">Animation:</label>
+                    <select id="animation-dropdown" style="margin-left:0.5em; min-width:120px;"></select>
+                </div>
+                <button id="apply-btn" style="margin-top:1.5em; padding:0.5em 2em; font-size:1.1em; background:#2a2a2a; color:#fff; border:none; border-radius:6px; cursor:pointer;">Apply</button>
+            </div>
+        </div>
+
+
+        <hr style="margin:2em 0;">
+        <div>
+            <label for="update-index">Update Webpage (index.html):</label>
+            <input type="file" id="update-index" accept=".html">
+            <button onclick="uploadIndex()">Upload</button>
+        </div>
+
+        <!-- Generic root file upload section -->
+        <div style="margin:2em 0; padding:1em; border:1px dashed #888; background:#222; max-width:400px; margin-left:auto; margin-right:auto;">
+            <strong>Upload root files here:</strong>
+            <div id="root-upload-drop" style="margin:1em 0; padding:1em; border:2px dashed #555; background:#333; cursor:pointer;">
+                Drag and drop files here to upload to root directory
+            </div>
+            <input type="file" id="root-upload-input" multiple style="display:none;">
+        </div>
+
+        <script>
+        // ...existing code...
+        // Root file upload logic
+        var rootDrop = document.getElementById('root-upload-drop');
+        var rootInput = document.getElementById('root-upload-input');
+        rootDrop.addEventListener('click', function() { rootInput.click(); });
+        rootDrop.addEventListener('dragover', function(e) { e.preventDefault(); rootDrop.style.background = '#444'; });
+        rootDrop.addEventListener('dragleave', function(e) { e.preventDefault(); rootDrop.style.background = '#333'; });
+        rootDrop.addEventListener('drop', function(e) {
+            e.preventDefault();
+            rootDrop.style.background = '#333';
+            handleRootFiles(e.dataTransfer.files);
+        });
+        rootInput.addEventListener('change', function(e) {
+            handleRootFiles(e.target.files);
+        });
+        function handleRootFiles(files) {
+            if (!files || files.length === 0) return;
+            Array.from(files).forEach(function(file) {
+                var xhttp = new XMLHttpRequest();
+                xhttp.open('POST', '/upload/' + encodeURIComponent(file.name), true);
+                xhttp.send(file);
+                xhttp.onload = function() {
+                    if (xhttp.status === 200) {
+                        rootDrop.innerHTML = 'Uploaded ' + file.name + ' successfully!';
+                        setTimeout(function() { rootDrop.innerHTML = 'Drag and drop files here to upload to root directory'; }, 2000);
+                    } else {
+                        rootDrop.innerHTML = 'Failed to upload ' + file.name;
+                        setTimeout(function() { rootDrop.innerHTML = 'Drag and drop files here to upload to root directory'; }, 2000);
+                    }
+                };
+            });
+        }
+        </script>
+
+        <script>
+        function handleDrop(event, elem) {
+            event.preventDefault();
+            var file = event.dataTransfer.files[0];
+            var filename = elem.getAttribute('data-filename');
+            if (file && file.type === "image/bmp") {
+                var xhttp = new XMLHttpRequest();
+                xhttp.open("POST", "/upload/" + filename, true);
+                xhttp.send(file);
+                xhttp.onload = function() { location.reload(); };
+            } else {
+                alert("Please drop a BMP file.");
+            }
+        }
+
+        function uploadIndex() {
+            var file = document.getElementById("update-index").files[0];
+            if (file && file.name.endsWith(".html")) {
+                var xhttp = new XMLHttpRequest();
+                xhttp.open("POST", "/upload/index.html", true);
+                xhttp.send(file);
+                xhttp.onload = function() { location.reload(); };
+            } else {
+                alert("Please select an HTML file.");
+            }
+        }
+        </script>
+</script>
+
+    <!-- Dynamic RGB Controls UI -->
+    <div id="rgb-controls" style="margin:2em auto; max-width:400px;"></div>
+    <script src="iro.min.js"></script>
+    <script src="rgb_ui.js"></script>
+</body>
+</html>

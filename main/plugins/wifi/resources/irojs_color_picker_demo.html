@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>iro.js Color Picker Demo</title>
+  <meta name="viewport" content="width=400, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; margin: 2em; background: #f8f8f8; }
+    #picker-container { margin-bottom: 1em; }
+    #hsv-values { font-size: 1.2em; }
+  </style>
+</head>
+<body>
+  <h2>iro.js Color Picker Demo</h2>
+  <p>This demo shows the <a href="https://iro.js.org/" target="_blank">iro.js</a> color picker with a hue ring and S/V sliders. Adjust the picker and see live HSV values below.</p>
+  <div id="color-preview" style="width:48px; height:48px; border-radius:50%; border:1px solid #ccc; margin-bottom:1em;"></div>
+  <div id="picker-container"></div>
+  <div id="hsv-values"></div>
+    <div style="margin-top:2em;">
+      <h3 style="margin-bottom:0.5em;">Custom Brightness Slider</h3>
+      <div id="b-slider-container"></div>
+      <div id="b-value" style="margin-top:0.5em; font-size:1.1em;"></div>
+    </div>
+  <script src="iro.min.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', function() {
+      var colorPicker = new iro.ColorPicker('#picker-container', {
+        width: 300,
+        color: { h: 180, s: 100, v: 100 },
+        layoutDirection: 'horizontal',
+        layout: [
+          { component: iro.ui.Box, options: {} },
+          { component: iro.ui.Slider, options: { sliderType: 'hue', sliderDirection: 'vertical'} }
+        ]
+      });
+        // Main color picker
+        function updateHSV() {
+        var hsv = colorPicker.color.hsv;
+        // 8-bit conversion: H (0-255), S (0-255), V (0-255)
+        var h8 = Math.round(hsv.h * 255 / 360);
+        var s8 = Math.round(hsv.s * 255 / 100);
+        var v8 = Math.round(hsv.v * 255 / 100);
+        document.getElementById('hsv-values').innerHTML =
+          `<b>H:</b> ${Math.round(hsv.h)} &nbsp; <b>S:</b> ${Math.round(hsv.s)} &nbsp; <b>V:</b> ${Math.round(hsv.v)}<br>` +
+          `<span style='color:#555'>8-bit: <b>H:</b> ${h8} &nbsp; <b>S:</b> ${s8} &nbsp; <b>V:</b> ${v8}</span>`;
+        document.getElementById('color-preview').style.background = colorPicker.color.hexString;
+      }
+      colorPicker.on('color:change', updateHSV);
+      updateHSV();
+        // Custom brightness slider picker (value only)
+        var bPicker = new iro.ColorPicker('#b-slider-container', {
+          width: 300,
+          color: { h: 180, s: 100, v: 100 },
+          layout: [
+            { component: iro.ui.Slider, options: { sliderType: 'value' } }
+          ]
+        });
+
+        // Sync hue and saturation from main picker to brightness picker
+        function syncHS() {
+          var hsv = colorPicker.color.hsv;
+          bPicker.color.hsv = { h: hsv.h, s: hsv.s, v: bPicker.color.hsv.v };
+        }
+        colorPicker.on('color:change', syncHS);
+        syncHS();
+
+        // Display 8-bit B value for brightness picker
+        function updateB() {
+          var b = bPicker.color.hsv.v;
+          var b8 = Math.round(b * 255 / 100);
+          document.getElementById('b-value').innerHTML = `<b>B:</b> ${b8} (8-bit)`;
+        }
+        bPicker.on('color:change', updateB);
+        updateB();
+    });
+  </script>
+</body>
+</html>

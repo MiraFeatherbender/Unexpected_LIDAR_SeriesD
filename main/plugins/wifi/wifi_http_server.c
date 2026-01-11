@@ -146,6 +146,18 @@ static esp_err_t upload_post_handler(httpd_req_t *req) {
     return handle_upload(req, filename);
 }
 
+    // Generic static file handler for any URI (maps /foo to /data/foo)
+    static esp_err_t file_get_handler(httpd_req_t *req) {
+        char filepath[256];
+        // Prevent directory traversal
+        const char *uri = req->uri;
+        if (strstr(uri, "..")) {
+            send_http_error(req, HTTPD_400_BAD_REQUEST, "Invalid path");
+            return ESP_FAIL;
+        }
+        snprintf(filepath, sizeof(filepath), "/data%s", uri);
+        return serve_file(req, filepath, NULL);
+    }
 
 // --- Unified dispatcher helper for REST handlers ---
 static esp_err_t dispatch_from_rest(const httpd_req_t *req, void *user_ctx, const void *data, size_t len) {
@@ -155,17 +167,29 @@ static esp_err_t dispatch_from_rest(const httpd_req_t *req, void *user_ctx, cons
     dispatcher_msg_t msg = {0};
     msg.source = SOURCE_REST;
     msg.targets[0] = (dispatch_target_t)(intptr_t)user_ctx; // user_ctx is (void*)(TARGET_*)
-    msg.message_len = len > sizeof(msg.data) ? sizeof(msg.data) : len;
-    memcpy(msg.data, data, msg.message_len);
+
+    // If this is a REST GET (context struct), pass via msg.context
+    if (len == sizeof(rest_json_request_t)) {
+        msg.context = (void*)data;
+        msg.message_len = 0;
+        ESP_LOGI(TAG, "dispatch_from_rest: REST GET, setting msg.context=%p", msg.context);
+    } else {
+        // REST command (POST): copy data into msg.data
+        msg.message_len = len > sizeof(msg.data) ? sizeof(msg.data) : len;
+        memcpy(msg.data, data, msg.message_len);
+        msg.context = NULL;
+        ESP_LOGI(TAG, "dispatch_from_rest: REST COMMAND, copying %d bytes to msg.data", (int)msg.message_len);
+    }
     dispatcher_send(&msg);
     return ESP_OK;
 }
 
+static char rest_json_buf[1024];
+
 static esp_err_t json_get_handler(httpd_req_t *req) {
-    char buf[1024];
     rest_json_request_t rest_ctx = {
-        .json_buf = buf,
-        .buf_size = sizeof(buf),
+        .json_buf = rest_json_buf,
+        .buf_size = sizeof(rest_json_buf),
         .json_len = NULL,
         .sem = xSemaphoreCreateBinary(),
         .user_data = NULL
@@ -181,19 +205,24 @@ static esp_err_t json_get_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
+
+    ESP_LOGI(TAG, "Dispatching REST GET for RGB JSON (target=%p, sem=%p)", target, rest_ctx.sem);
     esp_err_t err = dispatch_from_rest(req, target, &rest_ctx, sizeof(rest_ctx));
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Dispatch failed for RGB JSON");
         send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Dispatch failed");
         vSemaphoreDelete(rest_ctx.sem);
         return ESP_FAIL;
     }
 
-    // Wait for the JSON to be generated (timeout: 1s)
-    if (xSemaphoreTake(rest_ctx.sem, pdMS_TO_TICKS(1000)) != pdTRUE) {
+    ESP_LOGI(TAG, "Waiting for RGB JSON semaphore (timeout=20s, sem=%p)", rest_ctx.sem);
+    if (xSemaphoreTake(rest_ctx.sem, pdMS_TO_TICKS(20000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Timeout waiting for RGB JSON semaphore");
         send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Timeout waiting for JSON");
         vSemaphoreDelete(rest_ctx.sem);
         return ESP_FAIL;
     }
+    ESP_LOGI(TAG, "RGB JSON semaphore taken, sending response");
 
     vSemaphoreDelete(rest_ctx.sem);
     httpd_resp_set_type(req, "application/json");
@@ -220,12 +249,24 @@ static esp_err_t rgb_handler(httpd_req_t *req) {
                 return ESP_FAIL;
             }
 
+            cJSON *j_plugin = cJSON_GetObjectItem(json, "plugin");
+            cJSON *j_h = cJSON_GetObjectItem(json, "h");
+            cJSON *j_s = cJSON_GetObjectItem(json, "s");
+            cJSON *j_v = cJSON_GetObjectItem(json, "v");
+            cJSON *j_b = cJSON_GetObjectItem(json, "b");
+
+            if (!j_plugin || !j_h || !j_s || !j_v || !j_b) {
+                cJSON_Delete(json);
+                send_http_error(req, HTTPD_400_BAD_REQUEST, "Missing field(s) in JSON");
+                return ESP_FAIL;
+            }
+
             uint8_t data[5];
-            data[0] = (uint8_t)cJSON_GetObjectItem(json, "plugin")->valueint;
-            data[1] = (uint8_t)cJSON_GetObjectItem(json, "h")->valueint;
-            data[2] = (uint8_t)cJSON_GetObjectItem(json, "s")->valueint;
-            data[3] = (uint8_t)cJSON_GetObjectItem(json, "v")->valueint;
-            data[4] = (uint8_t)cJSON_GetObjectItem(json, "b")->valueint;
+            data[0] = (uint8_t)j_plugin->valueint;
+            data[1] = (uint8_t)j_h->valueint;
+            data[2] = (uint8_t)j_s->valueint;
+            data[3] = (uint8_t)j_v->valueint;
+            data[4] = (uint8_t)j_b->valueint;
             cJSON_Delete(json);
 
             esp_err_t err = dispatch_from_rest(req, (void*)(intptr_t)TARGET_RGB, data, sizeof(data));
@@ -233,7 +274,8 @@ static esp_err_t rgb_handler(httpd_req_t *req) {
                 send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Dispatch failed");
                 return ESP_FAIL;
             }
-            httpd_resp_sendstr(req, "OK");
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, "{\"status\":\"OK\"}");
             return ESP_OK;
         }
         default:
@@ -265,6 +307,7 @@ static const http_server_route_t http_server_routes[] = {
     { "/upload/*", HTTP_POST, upload_post_handler, NULL },
     #include "rest_endpoints.def"
 #undef X_REST_ENDPOINT
+    { "/*", HTTP_GET, file_get_handler, NULL }, // catch-all static file handler
 };
 
 static esp_err_t register_http_server_routes(httpd_handle_t server) {

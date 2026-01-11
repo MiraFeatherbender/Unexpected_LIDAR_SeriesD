@@ -100,7 +100,7 @@ static void io_battery_task(void *arg)
         dispatcher_msg_t rgb_msg = {0};
         memset(rgb_msg.targets, TARGET_MAX, sizeof(rgb_msg.targets));
         rgb_msg.targets[0] = TARGET_RGB;
-        rgb_msg.source = SOURCE_UNDEFINED;
+        rgb_msg.source = SOURCE_BATTERY;
 
         const battery_rgb_tier_t* tier = battery_get_rgb_tier(voltage, vbus);
         if (tier) {
@@ -127,7 +127,7 @@ static void io_battery_task(void *arg)
         dispatcher_msg_t usb_msg = {0};
         memset(usb_msg.targets, TARGET_MAX, sizeof(usb_msg.targets));
         usb_msg.targets[0] = TARGET_USB_CDC;
-        usb_msg.source = SOURCE_UNDEFINED;
+        usb_msg.source = SOURCE_BATTERY;
 
         usb_msg.message_len = snprintf(
             (char *)usb_msg.data,
