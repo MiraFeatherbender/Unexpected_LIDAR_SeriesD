@@ -227,9 +227,17 @@ static void io_rgb_generate_json(rest_json_request_t *req) {
 static void io_rgb_task(void *arg)
 {
     dispatcher_msg_t msg = {0};
-
+    TickType_t rest_off_until = 0;
 
     while (1) {
+
+        // Clear REST priority if timeout elapsed
+        if (rest_off_until != 0 && xTaskGetTickCount() >= rest_off_until) {
+            // Clear REST priority after timeout
+            priority &= ~(1ULL << SOURCE_REST);
+            rest_off_until = 0;
+        }
+
         if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
             priority |= (1ULL << msg.source);
 
@@ -259,8 +267,8 @@ static void io_rgb_task(void *arg)
                         }
                         if(msg.data[0] == RGB_PLUGIN_OFF) {
                             // Clear priority for REST if turning off
-                            priority &= ~(1ULL << SOURCE_REST);
-                            vTaskDelay(pdMS_TO_TICKS(5000)); // delay to ensure OFF is processed
+                            // priority &= ~(1ULL << SOURCE_REST);
+                            rest_off_until = xTaskGetTickCount() + pdMS_TO_TICKS(5000); // 5 seconds off
                         }
                     }
                     break;

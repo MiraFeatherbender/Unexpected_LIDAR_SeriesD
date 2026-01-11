@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>BMP Image Preview</title>
+    <title>PNG Image Preview</title>
     <style>
         body { font-family: Arial, sans-serif; background: #222; color: #eee; text-align: center; }
         .img-container { display: flex; justify-content: center; gap: 2em; margin-top: 2em; }
@@ -11,22 +11,22 @@
     </style>
 </head>
 <body>
-    <h1>BMP Image Preview</h1>
+    <h1>PNG Image Preview</h1>
 
         <div class="img-container">
-            <div class="bmp-drop-target" data-filename="images/openSimplex2.bmp"
+            <div class="png-drop-target" data-filename="images/openSimplex2.png"
                  ondragover="event.preventDefault()"
                  ondrop="handleDrop(event, this)">
-                <h2>openSimplex2.bmp</h2>
-                <img src="images/openSimplex2.bmp" alt="openSimplex2 BMP">
-                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag BMP here to replace</div>
+                <h2>openSimplex2.png</h2>
+                <img src="images/openSimplex2.png" alt="openSimplex2 PNG">
+                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag PNG here to replace</div>
             </div>
-            <div class="bmp-drop-target" data-filename="images/perlinNoise.bmp"
+            <div class="png-drop-target" data-filename="images/perlinNoise.png"
                  ondragover="event.preventDefault()"
                  ondrop="handleDrop(event, this)">
-                <h2>perlinNoise.bmp</h2>
-                <img src="images/perlinNoise.bmp" alt="perlinNoise BMP">
-                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag BMP here to replace</div>
+                <h2>perlinNoise.png</h2>
+                <img src="images/perlinNoise.png" alt="perlinNoise PNG">
+                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag PNG here to replace</div>
             </div>
             <!-- New RGB UI Panel -->
             <div id="rgb-ui-panel" style="background:#181818; border-radius:12px; padding:1.5em; min-width:340px; max-width:360px; display:flex; flex-direction:column; align-items:center; margin-left:2em;">
@@ -103,13 +103,13 @@
             event.preventDefault();
             var file = event.dataTransfer.files[0];
             var filename = elem.getAttribute('data-filename');
-            if (file && file.type === "image/bmp") {
+            if (file && file.type === "image/png") {
                 var xhttp = new XMLHttpRequest();
                 xhttp.open("POST", "/upload/" + filename, true);
                 xhttp.send(file);
                 xhttp.onload = function() { location.reload(); };
             } else {
-                alert("Please drop a BMP file.");
+                alert("Please drop a PNG file.");
             }
         }
 
