@@ -11,6 +11,8 @@ const HSVEditor = (function() {
     { h: 0, s: 100, v: 75 },
     { h: 0, s: 100, v: 40 }
   ];
+  let palettePresets = {};
+  let paletteNames = [];
   let chart, iroPicker;
 
   function getChannelMinMax(channel) {
@@ -186,7 +188,11 @@ const HSVEditor = (function() {
       const container = document.querySelector(containerSelector);
       if (!container) throw new Error('HSVEditor: container not found');
       container.innerHTML = `
-        <div style="width: 780px; height: 360; background: #181818; border-radius: 8px; border: 1px solid #181818; margin-bottom: 1em; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;">
+        <div style="width: 780px; height: 400px; background: #181818; border-radius: 8px; border: 1px solid #181818; margin-bottom: 1em; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;">
+          <div style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
+            <select id="palette-dropdown" style="font-size:1em; padding:4px 12px; border-radius:4px;"></select>
+            <button id="save-preset-btn" style="font-size:1.1em; padding:4px 16px; background:#2a2a2a; color:#fff; border:none; border-radius:4px; cursor:pointer;">Save</button>
+          </div>
           <div style="width: 100%; display: flex; flex-direction: row; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px;">
             <canvas id="interpolated-bar" width="512" height="32" style="display:block; margin:1em 0; border-radius:6px; border:1px solid #ccc;"></canvas>
             <div id="hsv-channel-select" style="display: flex; flex-direction: row; align-items: center; margin-left: 24px;">
@@ -202,6 +208,175 @@ const HSVEditor = (function() {
           </div>
         </div>
       `;
+
+      fetch('color_palettes.json')
+        .then(resp => resp.json())
+        .then(data => {
+          // Support both old and new formats
+          palettePresets = data.presets ? data.presets : data;
+          paletteNames = Object.keys(palettePresets);
+          const dropdown = container.querySelector('#palette-dropdown');
+          dropdown.innerHTML = '';
+          paletteNames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            dropdown.appendChild(opt);
+          });
+          // Set initial preset to first
+          if (paletteNames.length > 0) {
+            setFirePresetFromName(paletteNames[0]);
+            dropdown.value = paletteNames[0];
+          }
+          dropdown.addEventListener('change', e => {
+            setFirePresetFromName(e.target.value);
+            updateHSV(hsvValuesDiv, interpolatedBar);
+            setActiveChannel(activeChannel);
+            updateAllIroBases();
+            updateIroHueSliderBounds();
+            updateIroSatSliderBounds();
+            updateIroValSliderBounds();
+          });
+          // Save button logic: update in-memory JSON for selected preset
+          const saveBtn = container.querySelector('#save-preset-btn');
+
+          // Create save dialog elements
+          const saveDialog = document.createElement('div');
+          saveDialog.style.position = 'absolute';
+          saveDialog.style.background = '#222';
+          saveDialog.style.border = '1px solid #444';
+          saveDialog.style.borderRadius = '8px';
+          saveDialog.style.padding = '16px';
+          saveDialog.style.zIndex = '1000';
+          saveDialog.style.display = 'none';
+
+          const saveDropdown = document.createElement('select');
+          paletteNames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            saveDropdown.appendChild(opt);
+          });
+          const newOpt = document.createElement('option');
+          newOpt.value = '__new__';
+          newOpt.textContent = 'New...';
+          saveDropdown.appendChild(newOpt);
+
+          const newNameInput = document.createElement('input');
+          newNameInput.type = 'text';
+          newNameInput.placeholder = 'New preset name';
+          newNameInput.style.display = 'none';
+          newNameInput.style.marginLeft = '8px';
+
+          const saveConfirmBtn = document.createElement('button');
+          saveConfirmBtn.textContent = 'Confirm';
+          saveConfirmBtn.style.marginLeft = '8px';
+          saveConfirmBtn.style.padding = '4px 16px';
+          saveConfirmBtn.style.background = '#2a2a2a';
+          saveConfirmBtn.style.color = '#fff';
+          saveConfirmBtn.style.border = 'none';
+          saveConfirmBtn.style.borderRadius = '4px';
+          saveConfirmBtn.style.cursor = 'pointer';
+          saveConfirmBtn.style.fontSize = '1em';
+
+          const saveCancelBtn = document.createElement('button');
+          saveCancelBtn.textContent = 'Cancel';
+          saveCancelBtn.style.marginLeft = '8px';
+          saveCancelBtn.style.padding = '4px 16px';
+          saveCancelBtn.style.background = '#444';
+          saveCancelBtn.style.color = '#fff';
+          saveCancelBtn.style.border = 'none';
+          saveCancelBtn.style.borderRadius = '4px';
+          saveCancelBtn.style.cursor = 'pointer';
+          saveCancelBtn.style.fontSize = '1em';
+
+          saveDialog.appendChild(document.createTextNode('Save as: '));
+          saveDialog.appendChild(saveDropdown);
+          saveDialog.appendChild(newNameInput);
+          saveDialog.appendChild(saveConfirmBtn);
+          saveDialog.appendChild(saveCancelBtn);
+          container.appendChild(saveDialog);
+
+          // Show/hide new name input
+          saveDropdown.addEventListener('change', () => {
+            newNameInput.style.display = (saveDropdown.value === '__new__') ? 'inline-block' : 'none';
+          });
+
+          // Save button click handler
+          saveBtn.addEventListener('click', () => {
+            saveDialog.style.display = 'block';
+            saveDialog.style.top = (saveBtn.offsetTop + saveBtn.offsetHeight + 8) + 'px';
+            saveDialog.style.left = saveBtn.offsetLeft + 'px';
+          });
+
+          // Cancel button handler
+          saveCancelBtn.addEventListener('click', () => {
+            saveDialog.style.display = 'none';
+            newNameInput.value = '';
+            saveDropdown.value = paletteNames[0];
+            newNameInput.style.display = 'none';
+          });
+
+          // Confirm button handler
+          saveConfirmBtn.addEventListener('click', () => {
+            let name;
+            if (saveDropdown.value === '__new__') {
+              name = newNameInput.value.trim();
+              if (!name) return;
+              if (palettePresets[name]) {
+                alert('Preset name already exists.');
+                return;
+              }
+              paletteNames.push(name);
+              const opt = document.createElement('option');
+              opt.value = name;
+              opt.textContent = name;
+              saveDropdown.insertBefore(opt, newOpt);
+              container.querySelector('#palette-dropdown').appendChild(opt.cloneNode(true));
+            } else {
+              name = saveDropdown.value;
+            }
+            palettePresets[name] = {
+              hue: firePreset.map(stop => stop.h),
+              sat: firePreset.map(stop => stop.s),
+              val: firePreset.map(stop => stop.v)
+            };
+            uploadPalettesJSON(palettePresets);
+            saveDialog.style.display = 'none';
+            newNameInput.value = '';
+            saveDropdown.value = paletteNames[0];
+            newNameInput.style.display = 'none';
+          });
+        })
+        .catch(err => {
+          console.error('Failed to load color_palettes.json:', err);
+        });
+
+      let suppressIroChange = false;
+
+      function setFirePresetFromName(name) {
+        const preset = palettePresets[name];
+        if (!preset) return;
+        firePreset.length = 0;
+        for (let i = 0; i < preset.hue.length; ++i) {
+          firePreset.push({
+            h: preset.hue[i],
+            s: preset.sat[i],
+            v: preset.val[i]
+          });
+        }
+        // Set iro.js color picker to average of preset, suppressing color:change
+        if (iroPicker && preset.hue && preset.sat && preset.val) {
+          const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+          suppressIroChange = true;
+          iroPicker.color.hsv = {
+            h: avg(preset.hue),
+            s: avg(preset.sat),
+            v: avg(preset.val)
+          };
+          setTimeout(() => { suppressIroChange = false; }, 0); // allow event loop to finish
+        }
+      }
       const hsvValuesDiv = container.querySelector('#hsv-values');
       const interpolatedBar = container.querySelector('#interpolated-bar');
       const irojsInterface = container.querySelector('#irojs-interface');
@@ -259,6 +434,7 @@ const HSVEditor = (function() {
         iroValBase = firePreset.map(stop => stop.v);
       }
       iroPicker.on('color:change', function(color) {
+        if (suppressIroChange) return;
         const h = Math.round(color.hsv.h);
         const s = Math.round(color.hsv.s);
         const v = Math.round(color.hsv.v);
@@ -383,3 +559,21 @@ const HSVEditor = (function() {
 // To use:
 // HSVEditor.init('#your-container');
 // let lut = HSVEditor.getLUT();
+
+// Upload updated palettes JSON to ESP32 server
+function uploadPalettesJSON(palettePresets) {
+    const jsonStr = JSON.stringify(palettePresets, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const fileName = "color_palettes.json";
+
+    var xhttp = new XMLHttpRequest();
+    xhttp.open('POST', '/upload/' + encodeURIComponent(fileName), true);
+    xhttp.send(blob);
+    xhttp.onload = function() {
+        if (xhttp.status === 200) {
+            console.log('Palette JSON uploaded to ESP32!');
+        } else {
+            console.error('Failed to upload palette JSON.');
+        }
+    };
+}
