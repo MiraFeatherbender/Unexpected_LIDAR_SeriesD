@@ -6,9 +6,9 @@ window.addEventListener('DOMContentLoaded', function() {
     var colorPicker = new iro.ColorPicker('#picker-container', {
         width: 300,
         color: { h: 180, s: 100, v: 100 },
-        layoutDirection: 'horizontal',
+        layoutDirection: 'vertical',
         layout: [
-            { component: iro.ui.Box, options: {} },
+            { component: iro.ui.Slider, options: { sliderType: 'value' } },
             { component: iro.ui.Slider, options: { sliderType: 'hue', sliderDirection: 'vertical'} }
         ]
     });
@@ -17,6 +17,7 @@ window.addEventListener('DOMContentLoaded', function() {
     var bPicker = new iro.ColorPicker('#b-slider-container', {
         width: 300,
         color: { h: 180, s: 100, v: 100 },
+        layoutDirection: 'vertical',
         layout: [
             { component: iro.ui.Slider, options: { sliderType: 'value' } }
         ]

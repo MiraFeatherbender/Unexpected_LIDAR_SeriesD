@@ -224,6 +224,20 @@ static void io_rgb_generate_json(rest_json_request_t *req) {
     cJSON_Delete(root);
 }
 
+
+static void default_action(dispatcher_msg_t *msg)
+{
+    if (msg->message_len >= 5) {
+        uint8_t plugin_id = msg->data[0];
+        uint8_t h = msg->data[1];
+        uint8_t s = msg->data[2];
+        uint8_t v = msg->data[3];
+        uint8_t brightness = msg->data[4];
+        rgb_set_animation(plugin_id, h, s, v, brightness);
+    }
+    return;
+}
+
 static void io_rgb_task(void *arg)
 {
     dispatcher_msg_t msg = {0};
@@ -257,44 +271,14 @@ static void io_rgb_task(void *arg)
                     else {
                         ESP_LOGI("io_rgb", "SOURCE_REST: COMMAND path entered, context=NULL, msg.data[0]=%d, msg.data[1]=%d, msg.data[2]=%d, msg.data[3]=%d, msg.data[4]=%d, msg_len=%d", msg.data[0], msg.data[1], msg.data[2], msg.data[3], msg.data[4], msg.message_len);
                         // REST command to change RGB
-                        if (msg.message_len >= 5) {
-                            uint8_t plugin_id = msg.data[0];
-                            uint8_t h = msg.data[1];
-                            uint8_t s = msg.data[2];
-                            uint8_t v = msg.data[3];
-                            uint8_t brightness = msg.data[4];
-                            rgb_set_animation(plugin_id, h, s, v, brightness);
-                        }
                         if(msg.data[0] == RGB_PLUGIN_OFF) {
-                            // Clear priority for REST if turning off
-                            // priority &= ~(1ULL << SOURCE_REST);
                             rest_off_until = xTaskGetTickCount() + pdMS_TO_TICKS(5000); // 5 seconds off
                         }
+                        default_action(&msg);
                     }
                     break;
-                case SOURCE_USB_MSC:
-                case SOURCE_MSC_BUTTON: 
-                    if (msg.message_len >= 1) {
-                        if (msg.data[0] == 0xA5) {
-                            // Assert override for both sources
-                            priority |= (1ULL << SOURCE_USB_MSC) | (1ULL << SOURCE_MSC_BUTTON);
-                            rgb_set_animation(RGB_PLUGIN_HEARTBEAT, 190, 220, 140, 64);
-                        } else if (msg.data[0] == 0x5A) {
-                            // Release override for both sources
-                            priority &= ~((1ULL << SOURCE_USB_MSC) | (1ULL << SOURCE_MSC_BUTTON));
-                        }
-                    }
-                    break;
-
                 default:
-                    if (msg.message_len >= 5) {
-                        uint8_t plugin_id = msg.data[0];
-                        uint8_t h = msg.data[1];
-                        uint8_t s = msg.data[2];
-                        uint8_t v = msg.data[3];
-                        uint8_t brightness = msg.data[4];
-                        rgb_set_animation(plugin_id, h, s, v, brightness);
-                    }
+                    default_action(&msg);
                     break;
             }
         }

@@ -44,7 +44,7 @@ static const battery_rgb_tier_t battery_rgb_tiers[] = {
     { 4.0f,  true, RGB_PLUGIN_AURORA,     84,   0,   0,   30 }, // Charging, full
     // Discharging tiers
     { 0.0f, false, RGB_PLUGIN_HEARTBEAT,   0, 255, 255,  255 }, // Discharging, low
-    { 3.3f, false, RGB_PLUGIN_FIRE,       30,   0,   0,  160 }, // Discharging, medium
+    { 3.3f, false, RGB_PLUGIN_FIRE,       15, 255, 215,  179 }, // Discharging, medium
     { 3.6f, false, RGB_PLUGIN_BREATHE,    88, 255, 220,  255 }, // Discharging, high
 };
 

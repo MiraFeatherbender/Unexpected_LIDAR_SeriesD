@@ -244,7 +244,7 @@ void io_usb_cdc_msc_init(void)
 
     // --- USB CDC/MSC and tasks are disabled for testing. ---
     
-    #define ENABLE_USB_CDC_MSC_INIT 0
+    #define ENABLE_USB_CDC_MSC_INIT 1
 #if ENABLE_USB_CDC_MSC_INIT
 
     ESP_LOGI(TAG, "USB Composite initialization");

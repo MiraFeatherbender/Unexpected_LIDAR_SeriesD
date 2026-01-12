@@ -5,44 +5,69 @@
     <title>PNG Image Preview</title>
     <style>
         body { font-family: Arial, sans-serif; background: #222; color: #eee; text-align: center; }
-        .img-container { display: flex; justify-content: center; gap: 2em; margin-top: 2em; }
+        .img-container { display: flex; flex-direction: row; justify-content: center; align-items: flex-start; gap: 2em; margin-top: 2em; }
+        .col { display: flex; flex-direction: column; gap: 2em; }
+        .panel { background:#181818; border-radius:12px; padding:1.5em; min-width:420px; max-width:600px; display:flex; flex-direction:column; align-items:center; }
         img { border: 2px solid #444; background: #111; max-width: 320px; max-height: 320px; }
         h1 { margin-top: 1em; }
     </style>
+    <!-- All JS libraries loaded in head, before any inline scripts -->
+    <script src="iro.min.js"></script>
+    <script src="rgb_ui.js"></script>
+    <script src="chart.umd.min.js"></script>
+    <script src="chartjs-plugin-dragdata.min.js"></script>
+    <script src="curve_widget.js"></script>
+    <script src="hsv_curve_editor.js"></script>
 </head>
 <body>
     <h1>PNG Image Preview</h1>
 
         <div class="img-container">
-            <div class="png-drop-target" data-filename="images/openSimplex2.png"
-                 ondragover="event.preventDefault()"
-                 ondrop="handleDrop(event, this)">
-                <h2>openSimplex2.png</h2>
-                <img src="images/openSimplex2.png" alt="openSimplex2 PNG">
-                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag PNG here to replace</div>
-            </div>
-            <div class="png-drop-target" data-filename="images/perlinNoise.png"
-                 ondragover="event.preventDefault()"
-                 ondrop="handleDrop(event, this)">
-                <h2>perlinNoise.png</h2>
-                <img src="images/perlinNoise.png" alt="perlinNoise PNG">
-                <div style="margin-top:0.5em; color:#aaa; font-size:0.9em;">Drag PNG here to replace</div>
-            </div>
-            <!-- New RGB UI Panel -->
-            <div id="rgb-ui-panel" style="background:#181818; border-radius:12px; padding:1.5em; min-width:340px; max-width:360px; display:flex; flex-direction:column; align-items:center; margin-left:2em;">
-                <div id="color-preview" style="width:48px; height:48px; border-radius:50%; border:1px solid #ccc; margin-bottom:1em;"></div>
-                <div id="picker-container"></div>
-                <div id="hsv-values" style="margin-bottom:1em;"></div>
-                <div style="margin-top:1em; width:100%;">
-                    <h3 style="margin-bottom:0.5em; color:#eee; font-size:1em;">Brightness</h3>
-                    <div id="b-slider-container"></div>
-                    <div id="b-value" style="margin-top:0.5em; font-size:1.1em;"></div>
+            <!-- Hidden images for canvas blending -->
+            <img id="img-openSimplex2" src="images/openSimplex2.png" alt="openSimplex2 PNG" style="display:none;" crossorigin="anonymous">
+            <img id="img-perlinNoise" src="images/perlinNoise.png" alt="perlinNoise PNG" style="display:none;" crossorigin="anonymous">
+            <div class="col">
+                <!-- Duplicate HSV Preview Canvas (above HSV Curve Editor) -->
+                <div id="hsv-preview-panel" class="panel" style="padding-bottom:0.5em; min-width:750px; max-width:1000px; align-items:center;">
+                    <canvas id="hsv-preview-canvas" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px; display:block; margin-left:auto; margin-right:auto;"></canvas>
+                    <div style="color:#aaa; font-size:0.95em; margin-top:0.5em; text-align:center;">HSV Preview</div>
                 </div>
-                <div style="margin-top:1.5em; width:100%;">
-                    <label for="animation-dropdown" style="color:#eee;">Animation:</label>
-                    <select id="animation-dropdown" style="margin-left:0.5em; min-width:120px;"></select>
+                <!-- HSV Curve Editor Panel (left of blend-panel) -->
+                <div id="hsv-editor-panel" class="panel" style="min-width:750px; max-width:1000px;">
+                    <!-- HSV Curve Editor widget will be rendered here -->
                 </div>
-                <button id="apply-btn" style="margin-top:1.5em; padding:0.5em 2em; font-size:1.1em; background:#2a2a2a; color:#fff; border:none; border-radius:6px; cursor:pointer;">Apply</button>
+            </div>
+            <div class="col">
+                <!-- Blended Canvas Panel -->
+                <div id="blend-panel" class="panel" style="min-width:340px; max-width:360px;">
+                    <h2 style="margin-bottom:0.5em; color:#eee; font-size:1.1em;">Blended Noise (Canvas)</h2>
+                    <canvas id="blend-canvas" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px;"></canvas>
+                    <div style="margin-top:1em; width:100%;">
+                        <label for="blend-slider" style="color:#eee;">Blend Ratio:</label>
+                        <input type="range" id="blend-slider" min="0" max="100" value="50" style="width:180px; margin-left:1em;">
+                        <span id="blend-value" style="margin-left:0.5em; color:#aaa;">50%</span>
+                    </div>
+                    <div style="margin-top:0.5em; color:#888; font-size:0.9em;">0% = Perlin, 100% = OpenSimplex2</div>
+                    <!-- Curve widget will be injected here -->
+                </div>
+            </div>
+            <div class="col">
+                <!-- New RGB UI Panel -->
+                <div id="rgb-ui-panel" class="panel" style="min-width:340px; max-width:360px;">
+                    <div id="color-preview" style="width:48px; height:48px; border-radius:50%; border:1px solid #ccc; margin-bottom:1em;"></div>
+                    <div id="picker-container"></div>
+                    <div id="hsv-values" style="margin-bottom:1em;"></div>
+                    <div style="margin-top:1em; width:100%;">
+                        <h3 style="margin-bottom:0.5em; color:#eee; font-size:1em;">Brightness</h3>
+                        <div id="b-slider-container"></div>
+                        <div id="b-value" style="margin-top:0.5em; font-size:1.1em;"></div>
+                    </div>
+                    <div style="margin-top:1.5em; width:100%;">
+                        <label for="animation-dropdown" style="color:#eee;">Animation:</label>
+                        <select id="animation-dropdown" style="margin-left:0.5em; min-width:120px;"></select>
+                    </div>
+                    <button id="apply-btn" style="margin-top:1.5em; padding:0.5em 2em; font-size:1.1em; background:#2a2a2a; color:#fff; border:none; border-radius:6px; cursor:pointer;">Apply</button>
+                </div>
             </div>
         </div>
 
@@ -52,6 +77,21 @@
             <label for="update-index">Update Webpage (index.html):</label>
             <input type="file" id="update-index" accept=".html">
             <button onclick="uploadIndex()">Upload</button>
+        </div>
+
+        <!-- Image upload section for noise PNGs -->
+        <div style="margin:2em 0; padding:1em; border:1px dashed #888; background:#222; max-width:400px; margin-left:auto; margin-right:auto;">
+            <strong>Upload noise images:</strong>
+            <div style="margin:1em 0; display:flex; flex-direction:column; gap:1em;">
+                <label style="color:#ccc;">openSimplex2.png:
+                    <input type="file" id="upload-openSimplex2" accept="image/png" style="margin-left:1em;">
+                    <button onclick="uploadImage('openSimplex2')">Upload</button>
+                </label>
+                <label style="color:#ccc;">perlinNoise.png:
+                    <input type="file" id="upload-perlinNoise" accept="image/png" style="margin-left:1em;">
+                    <button onclick="uploadImage('perlinNoise')">Upload</button>
+                </label>
+            </div>
         </div>
 
         <!-- Generic root file upload section -->
@@ -64,7 +104,99 @@
         </div>
 
         <script>
-        // ...existing code...
+    // --- Blended Canvas Logic with Curve Widget ---
+    const imgOpenSimplex = document.getElementById('img-openSimplex2');
+    const imgPerlin = document.getElementById('img-perlinNoise');
+    const blendCanvas = document.getElementById('blend-canvas');
+    const blendSlider = document.getElementById('blend-slider');
+    const blendValue = document.getElementById('blend-value');
+    let openSimplexLoaded = false, perlinLoaded = false;
+    let brightnessCurve = new Array(256).fill(0);
+
+    // Inject curve widget at bottom of blend-panel
+    const blendPanel = document.getElementById('blend-panel');
+    const curveWidgetContainer = document.createElement('div');
+    curveWidgetContainer.id = 'curve-widget-container';
+    curveWidgetContainer.style.marginTop = '2em';
+    blendPanel.appendChild(curveWidgetContainer);
+
+    // Create curve widget
+    const curveWidget = CurveWidget.create({
+        container: curveWidgetContainer,
+        onChange: arr => {
+            brightnessCurve = arr.slice();
+            drawBlendedCanvas();
+        }
+    });
+
+    function drawBlendedCanvas() {
+        if (!openSimplexLoaded || !perlinLoaded) return;
+        const ctx = blendCanvas.getContext('2d', { willReadFrequently: true });
+        const blend = parseInt(blendSlider.value, 10) / 100;
+        ctx.clearRect(0, 0, blendCanvas.width, blendCanvas.height);
+        // Draw perlinNoise.png as base
+        ctx.globalAlpha = 1 - blend;
+        ctx.drawImage(imgPerlin, 0, 0, blendCanvas.width, blendCanvas.height);
+        // Draw openSimplex2.png on top
+        ctx.globalAlpha = blend;
+        ctx.drawImage(imgOpenSimplex, 0, 0, blendCanvas.width, blendCanvas.height);
+        ctx.globalAlpha = 1.0;
+        // Apply brightness curve as LUT
+        let imageData = ctx.getImageData(0, 0, blendCanvas.width, blendCanvas.height);
+        let data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            // Use original brightness as LUT index
+            let v = data[i]; // R channel (images are greyscale)
+            let idx = Math.max(0, Math.min(255, v));
+            let lut = brightnessCurve[idx];
+            // Clamp LUT output to 0-255
+            let adj = Math.max(0, Math.min(255, lut));
+            data[i] = data[i+1] = data[i+2] = adj;
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Duplicate blend-canvas to hsv-preview-canvas and apply HSV LUT
+    function updateHSVPreviewWithLUT() {
+        const src = document.getElementById('blend-canvas');
+        const dst = document.getElementById('hsv-preview-canvas');
+        if (!src || !dst) return;
+        const lut = (typeof HSVEditor !== 'undefined' && HSVEditor.getLUT) ? HSVEditor.getLUT() : null;
+        if (!lut || lut.length !== 256) return;
+        const srcCtx = src.getContext('2d');
+        const dstCtx = dst.getContext('2d');
+        const imgData = srcCtx.getImageData(0, 0, src.width, src.height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            // Use brightness (R channel, greyscale) as LUT index
+            const v = data[i];
+            const color = lut[v]; // {r,g,b}
+            if (color) {
+                data[i] = color.r;
+                data[i+1] = color.g;
+                data[i+2] = color.b;
+            }
+            // else leave as is
+        }
+        dstCtx.putImageData(imgData, 0, 0);
+    }
+    // Patch drawBlendedCanvas to also update hsv-preview-canvas with LUT
+    const origDrawBlendedCanvas = drawBlendedCanvas;
+    drawBlendedCanvas = function() {
+        origDrawBlendedCanvas();
+        updateHSVPreviewWithLUT();
+    }
+
+    imgOpenSimplex.onload = function() { openSimplexLoaded = true; drawBlendedCanvas(); };
+    imgPerlin.onload = function() { perlinLoaded = true; drawBlendedCanvas(); };
+    blendSlider.addEventListener('input', function() {
+        blendValue.textContent = blendSlider.value + '%';
+        drawBlendedCanvas();
+    });
+    if (imgOpenSimplex.complete) { openSimplexLoaded = true; }
+    if (imgPerlin.complete) { perlinLoaded = true; }
+    if (openSimplexLoaded && perlinLoaded) drawBlendedCanvas();
+    // --- End Blended Canvas Logic ---
         // Root file upload logic
         var rootDrop = document.getElementById('root-upload-drop');
         var rootInput = document.getElementById('root-upload-input');
@@ -99,17 +231,17 @@
         </script>
 
         <script>
-        function handleDrop(event, elem) {
-            event.preventDefault();
-            var file = event.dataTransfer.files[0];
-            var filename = elem.getAttribute('data-filename');
+        function uploadImage(type) {
+            var input = document.getElementById('upload-' + type);
+            var file = input.files[0];
             if (file && file.type === "image/png") {
+                var filename = (type === 'openSimplex2') ? 'images/openSimplex2.png' : 'images/perlinNoise.png';
                 var xhttp = new XMLHttpRequest();
                 xhttp.open("POST", "/upload/" + filename, true);
                 xhttp.send(file);
                 xhttp.onload = function() { location.reload(); };
             } else {
-                alert("Please drop a PNG file.");
+                alert("Please select a PNG file.");
             }
         }
 
@@ -124,12 +256,9 @@
                 alert("Please select an HTML file.");
             }
         }
+        // Initialize HSV Curve Editor
+        HSVEditor.init('#hsv-editor-panel');
+        HSVEditor.onLUTChange = updateHSVPreviewWithLUT;
         </script>
-</script>
-
-    <!-- Dynamic RGB Controls UI -->
-    <div id="rgb-controls" style="margin:2em auto; max-width:400px;"></div>
-    <script src="iro.min.js"></script>
-    <script src="rgb_ui.js"></script>
 </body>
 </html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chart.js Drag X Minimal Example</title>
+  <style>
+    body { background: #222; color: #eee; font-family: Arial, sans-serif; text-align: center; }
+    #chart-container { margin: 2em auto; width: 600px; }
+    canvas { background: #181818; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Chart.js X-Drag Demo</h1>
+  <div id="chart-container">
+    <canvas id="drag-chart" width="600" height="300"></canvas>
+  </div>
+  <script src="chart.umd.min.js"></script>
+  <script src="chartjs-plugin-dragdata.min.js"></script>
+  <script>
+    const ctx = document.getElementById('drag-chart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          type: 'scatter',
+          label: 'Draggable Points',
+          data: [
+            {x: 0, y: 0},
+            {x: 128, y: 128},
+            {x: 255, y: 255}
+          ],
+          borderColor: '#fff',
+          backgroundColor: '#fff',
+          pointBackgroundColor: '#fff',
+          pointRadius: 8,
+          pointHoverRadius: 10,
+          // showLine: true, // Disable line to allow x-drag
+          fill: false,
+          tension: 0.4,
+          parsing: false // REQUIRED for x-drag
+        }]
+      },
+      options: {
+        responsive: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          dragData: {
+            dragData: true,
+            dragDataX: true,
+            showTooltip: true,
+            onDrag: function(e, datasetIndex, index, value) {
+              // Optionally log or update UI
+              // console.log('Dragging', value);
+            },
+            onDragEnd: function(e, datasetIndex, index, value) {
+              // Optionally log or update UI
+              // console.log('Drag end', value);
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'linear',
+            min: 0,
+            max: 255,
+            title: { display: true, text: 'X' },
+            grid: { color: '#444' }
+          },
+          y: {
+            min: 0,
+            max: 255,
+            title: { display: true, text: 'Y' },
+            grid: { color: '#444' }
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
