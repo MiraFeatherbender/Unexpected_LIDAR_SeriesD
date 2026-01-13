@@ -227,6 +227,9 @@ const HSVEditor = (function() {
           if (paletteNames.length > 0) {
             setFirePresetFromName(paletteNames[0]);
             dropdown.value = paletteNames[0];
+            // Ensure display updates to match loaded preset
+            updateHSV(hsvValuesDiv, interpolatedBar);
+            setActiveChannel(activeChannel);
           }
           dropdown.addEventListener('change', e => {
             setFirePresetFromName(e.target.value);
@@ -342,6 +345,7 @@ const HSVEditor = (function() {
               val: firePreset.map(stop => stop.v)
             };
             uploadPalettesJSON(palettePresets);
+            savePaletteRowPNG(name, container.querySelector('#interpolated-bar'));
             saveDialog.style.display = 'none';
             newNameInput.value = '';
             saveDropdown.value = paletteNames[0];
@@ -577,3 +581,40 @@ function uploadPalettesJSON(palettePresets) {
         }
     };
 }
+
+// Patch: Add logic to save 1px row PNG of interpolated bar on palette save
+// This should be called in the save confirm handler inside HSVEditor.init
+// Example usage: savePaletteRowPNG(name, container.querySelector('#interpolated-bar'));
+function savePaletteRowPNG(name, interpolatedBar) {
+    if (interpolatedBar) {
+        // Create a 1px-high canvas
+        const rowCanvas = document.createElement('canvas');
+        rowCanvas.width = interpolatedBar.width;
+        rowCanvas.height = 1;
+        const srcCtx = interpolatedBar.getContext('2d');
+        const rowCtx = rowCanvas.getContext('2d');
+        // Get the first row of pixels
+        const rowData = srcCtx.getImageData(0, 0, interpolatedBar.width, 1);
+        rowCtx.putImageData(rowData, 0, 0);
+
+        // Export as PNG and upload
+        rowCanvas.toBlob(function(blob) {
+            // Use plain path, do not encode
+            const fileName = `images/${name}_Palette.png`;
+            var xhttp = new XMLHttpRequest();
+            xhttp.open('POST', '/upload/' + fileName, true);
+            xhttp.send(blob);
+            xhttp.onload = function() {
+                if (xhttp.status === 200) {
+                    console.log('Palette PNG uploaded to ESP32!');
+                } else {
+                    console.error('Failed to upload palette PNG.');
+                }
+            };
+        }, 'image/png');
+    }
+}
+
+// --- PATCH: Add PNG export to save confirm logic ---
+// Find the saveConfirmBtn event handler inside HSVEditor.init and add:
+// savePaletteRowPNG(name, container.querySelector('#interpolated-bar'));
