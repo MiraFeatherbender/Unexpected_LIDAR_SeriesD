@@ -49,7 +49,7 @@ static void fire_set_brightness(uint8_t b) {
     fire_composer_config.user_brightness = b;
 }
 
-static const rgb_anim_t fire_plugin = {
+static const hsv_anim_t fire_plugin = {
     .begin = fire_begin,
     .step = fire_step,
     .set_color = fire_set_color,

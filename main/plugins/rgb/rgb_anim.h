@@ -37,6 +37,19 @@ typedef struct {
     #include "io_rgb.def"
     #undef X_FIELD_B
     #undef X_FIELD_HSV
+} hsv_anim_t;
+
+typedef struct {
+    uint8_t r; // Red (0-255)
+    uint8_t g; // Green (0-255)
+    uint8_t b; // Blue (0-255)
+} rgb_color_t;
+
+typedef struct {
+    void (*begin)(void);                        // reset internal state
+    void (*step)(rgb_color_t *out_rgb);         // run one animation frame, output RGB
+    void (*set_color)(rgb_color_t rgb);         // every plugin receives color in
+    void (*set_brightness)(uint8_t b);          // every plugin receives master brightness
 } rgb_anim_t;
 
 // ---------------------------------------------------------
@@ -51,6 +64,6 @@ void io_rgb_set_anim_brightness(uint8_t b);
 // Implemented in io_rgb.c
 // ---------------------------------------------------------
 void io_rgb_register_plugin(rgb_plugin_id_t id,
-                            const rgb_anim_t *plugin);
+                            const hsv_anim_t *plugin);
 
 #endif // RGB_ANIM_H

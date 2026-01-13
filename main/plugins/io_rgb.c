@@ -19,10 +19,10 @@
 static QueueHandle_t rgb_cmd_queue = NULL;
 
 // Plugin registry (dispatcher‑style)
-static const rgb_anim_t *rgb_plugins[RGB_PLUGIN_MAX] = {0};
+static const hsv_anim_t *rgb_plugins[RGB_PLUGIN_MAX] = {0};
 
 // Active plugin + current parameters
-static const rgb_anim_t *active_anim = NULL;
+static const hsv_anim_t *active_anim = NULL;
 static hsv_color_t current_hsv = {0, 0, 0};
 static uint8_t current_brightness = 255;
 
@@ -121,7 +121,7 @@ void hsv8_to_rgb888(uint8_t h, uint8_t s, uint8_t v,
 }
 
 // Registration API (mirrors dispatcher_register_handler)
-void io_rgb_register_plugin(rgb_plugin_id_t id, const rgb_anim_t *plugin)
+void io_rgb_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
 {
     if (id < RGB_PLUGIN_MAX)
         rgb_plugins[id] = plugin;

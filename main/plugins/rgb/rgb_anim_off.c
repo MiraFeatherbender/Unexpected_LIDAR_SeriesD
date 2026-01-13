@@ -28,7 +28,7 @@ static void off_set_brightness(uint8_t b)
     off_brightness = b; // ignored but stored
 }
 
-static const rgb_anim_t off_plugin = {
+static const hsv_anim_t off_plugin = {
     .begin = off_begin,
     .step = off_step,
     .set_color = off_set_color,

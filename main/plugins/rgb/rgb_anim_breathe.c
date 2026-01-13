@@ -39,7 +39,7 @@ static void breathe_set_brightness(uint8_t b)
     breathe_brightness = b;
 }
 
-static const rgb_anim_t breathe_plugin = {
+static const hsv_anim_t breathe_plugin = {
     .begin = breathe_begin,
     .step = breathe_step,
     .set_color = breathe_set_color,

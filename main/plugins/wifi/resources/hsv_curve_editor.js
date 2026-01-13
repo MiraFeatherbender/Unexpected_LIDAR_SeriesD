@@ -191,7 +191,7 @@ const HSVEditor = (function() {
         <div style="width: 780px; height: 400px; background: #181818; border-radius: 8px; border: 1px solid #181818; margin-bottom: 1em; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;">
           <div style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
             <select id="palette-dropdown" style="font-size:1em; padding:4px 12px; border-radius:4px;"></select>
-            <button id="save-preset-btn" style="font-size:1.1em; padding:4px 16px; background:#2a2a2a; color:#fff; border:none; border-radius:4px; cursor:pointer;">Save</button>
+            <button id="save-preset-btn" style="font-size:1.1em; padding:4px 16px; background:#2a2a2a; color:#fff; border:none; border-radius:4px; cursor:pointer;">Save Color Palette</button>
           </div>
           <div style="width: 100%; display: flex; flex-direction: row; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px;">
             <canvas id="interpolated-bar" width="512" height="32" style="display:block; margin:1em 0; border-radius:6px; border:1px solid #ccc;"></canvas>

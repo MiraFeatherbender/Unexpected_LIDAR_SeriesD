@@ -55,7 +55,7 @@ static void aurora_set_brightness(uint8_t b) {
     aurora_composer_config.user_brightness = b;
 }
 
-static const rgb_anim_t aurora_plugin = {
+static const hsv_anim_t aurora_plugin = {
     .begin = aurora_begin,
     .step = aurora_step,
     .set_color = aurora_set_color,

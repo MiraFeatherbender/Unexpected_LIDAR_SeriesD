@@ -48,7 +48,15 @@
                         <span id="blend-value" style="margin-left:0.5em; color:#aaa;">50%</span>
                     </div>
                     <div style="margin-top:0.5em; color:#888; font-size:0.9em;">0% = Perlin, 100% = OpenSimplex2</div>
+                    <!-- New palette dropdown and save button -->
+                    <div style="margin: 32px 0 0 0; display:flex; flex-direction:row; align-items:center;">
+                        <select id="noise-palette-dropdown" style="font-size:1em; padding:4px 12px; border-radius:4px; margin-right:8px;">
+                            <!-- Options will be populated by JavaScript -->
+                        </select>
+                        <button id="save-curve-btn" style="font-size:1.1em; padding:4px 16px; background:#2a2a2a; color:#fff; border:none; border-radius:4px; cursor:pointer;">Save Curve</button>
+                    </div>
                     <!-- Curve widget will be injected here -->
+                    <div id="curve-widget-container" style="margin-top:16px;"></div>
                 </div>
             </div>
             <div class="col">
@@ -103,6 +111,22 @@
             <input type="file" id="root-upload-input" multiple style="display:none;">
         </div>
 
+        <!-- --- Modal Save Dialog for Curve/Blend --- -->
+        <!-- Create dialog elements -->
+        <div id="save-curve-dialog" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:10000; justify-content:center; align-items:center; flex-direction:column; font-size:1.1em; font-family:Arial, sans-serif; text-align:center; padding:0; margin:0;">
+            <div style="background:#222; border:1px solid #444; border-radius:12px; padding:2em; min-width:320px; max-width:400px; box-shadow:0 4px 24px #000;">
+                <div style="font-weight:bold; font-size:1.2em; margin-bottom:1em;">Save Curve & Blend</div>
+                <select id="save-palette-dropdown" style="font-size:1em; padding:4px 12px; border-radius:4px; margin-right:8px; width:100%;">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+                <input type="text" id="new-palette-name" placeholder="New palette name" style="display:none; margin-top:1em; padding:4px 12px; border-radius:4px; width:100%;">
+                <div style="margin-top:2em; display:flex; flex-direction:row; justify-content:center; gap:2em;">
+                    <button id="confirm-save-btn" style="padding:6px 24px; background:#2a2a2a; color:#fff; border:none; border-radius:6px; cursor:pointer;">Confirm</button>
+                    <button id="cancel-save-btn" style="padding:6px 24px; background:#444; color:#fff; border:none; border-radius:6px; cursor:pointer;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <script>
     // --- Blended Canvas Logic with Curve Widget ---
     const imgOpenSimplex = document.getElementById('img-openSimplex2');
@@ -117,7 +141,7 @@
     const blendPanel = document.getElementById('blend-panel');
     const curveWidgetContainer = document.createElement('div');
     curveWidgetContainer.id = 'curve-widget-container';
-    curveWidgetContainer.style.marginTop = '2em';
+    curveWidgetContainer.style.marginTop = '0.5em';
     blendPanel.appendChild(curveWidgetContainer);
 
     // Create curve widget
@@ -131,6 +155,7 @@
 
     function drawBlendedCanvas() {
         if (!openSimplexLoaded || !perlinLoaded) return;
+        // Use willReadFrequently: true for efficiency
         const ctx = blendCanvas.getContext('2d', { willReadFrequently: true });
         const blend = parseInt(blendSlider.value, 10) / 100;
         ctx.clearRect(0, 0, blendCanvas.width, blendCanvas.height);
@@ -145,13 +170,13 @@
         let imageData = ctx.getImageData(0, 0, blendCanvas.width, blendCanvas.height);
         let data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
-            // Use original brightness as LUT index
-            let v = data[i]; // R channel (images are greyscale)
-            let idx = Math.max(0, Math.min(255, v));
-            let lut = brightnessCurve[idx];
-            // Clamp LUT output to 0-255
-            let adj = Math.max(0, Math.min(255, lut));
-            data[i] = data[i+1] = data[i+2] = adj;
+          // Use original brightness as LUT index
+          let v = data[i]; // R channel (images are greyscale)
+          let idx = Math.max(0, Math.min(255, v));
+          let lut = brightnessCurve[idx];
+          // Clamp LUT output to 0-255
+          let adj = Math.max(0, Math.min(255, lut));
+          data[i] = data[i+1] = data[i+2] = adj;
         }
         ctx.putImageData(imageData, 0, 0);
     }
@@ -163,20 +188,21 @@
         if (!src || !dst) return;
         const lut = (typeof HSVEditor !== 'undefined' && HSVEditor.getLUT) ? HSVEditor.getLUT() : null;
         if (!lut || lut.length !== 256) return;
-        const srcCtx = src.getContext('2d');
-        const dstCtx = dst.getContext('2d');
+        // Use willReadFrequently: true for efficiency
+        const srcCtx = src.getContext('2d', { willReadFrequently: true });
+        const dstCtx = dst.getContext('2d', { willReadFrequently: true });
         const imgData = srcCtx.getImageData(0, 0, src.width, src.height);
         const data = imgData.data;
         for (let i = 0; i < data.length; i += 4) {
-            // Use brightness (R channel, greyscale) as LUT index
-            const v = data[i];
-            const color = lut[v]; // {r,g,b}
-            if (color) {
-                data[i] = color.r;
-                data[i+1] = color.g;
-                data[i+2] = color.b;
-            }
-            // else leave as is
+          // Use brightness (R channel, greyscale) as LUT index
+          const v = data[i];
+          const color = lut[v]; // {r,g,b}
+          if (color) {
+            data[i] = color.r;
+            data[i+1] = color.g;
+            data[i+2] = color.b;
+          }
+          // else leave as is
         }
         dstCtx.putImageData(imgData, 0, 0);
     }
@@ -259,6 +285,205 @@
         // Initialize HSV Curve Editor
         HSVEditor.init('#hsv-editor-panel');
         HSVEditor.onLUTChange = updateHSVPreviewWithLUT;
+        // --- Noise Curves JSON load and dropdown population ---
+        let noiseCurvesData = {};
+        fetch('Noise_Curves.json')
+          .then(res => res.json())
+          .then(json => {
+            noiseCurvesData = json;
+            const paletteDropdown = document.getElementById('noise-palette-dropdown');
+            paletteDropdown.innerHTML = '';
+            Object.keys(noiseCurvesData).forEach(name => {
+              const opt = document.createElement('option');
+              opt.value = name;
+              opt.textContent = name;
+              paletteDropdown.appendChild(opt);
+            });
+            // Optionally select first palette
+            if (paletteDropdown.options.length > 0) {
+              paletteDropdown.value = paletteDropdown.options[0].value;
+            }
+          });
+        // --- Palette selection: update blend slider and curve widget ---
+const paletteDropdown = document.getElementById('noise-palette-dropdown');
+paletteDropdown.addEventListener('change', function() {
+  const name = paletteDropdown.value;
+  const entry = noiseCurvesData[name];
+  if (entry) {
+    blendSlider.value = entry.blend_ratio;
+    blendValue.textContent = entry.blend_ratio + '%';
+    if (curveWidget && typeof curveWidget.setPoints === 'function') {
+      curveWidget.setPoints(entry.curve_points);
+    }
+    drawBlendedCanvas();
+  } else {
+    // Fallback: keep current blend slider and curve widget settings
+  }
+});
+// Optionally, trigger change event after initial load to sync UI
+fetch('Noise_Curves.json')
+  .then(res => res.json())
+  .then(json => {
+    noiseCurvesData = json;
+    paletteDropdown.innerHTML = '';
+    Object.keys(noiseCurvesData).forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      paletteDropdown.appendChild(opt);
+    });
+    if (paletteDropdown.options.length > 0) {
+      paletteDropdown.value = paletteDropdown.options[0].value;
+      paletteDropdown.dispatchEvent(new Event('change'));
+    }
+  });
+
+// --- Small contextual save dialog for curve/blend ---
+const saveDialog = document.createElement('div');
+saveDialog.style.position = 'absolute';
+saveDialog.style.background = '#222';
+saveDialog.style.border = '1px solid #444';
+saveDialog.style.borderRadius = '10px';
+saveDialog.style.padding = '1em 1.5em';
+saveDialog.style.boxShadow = '0 2px 12px #000';
+saveDialog.style.display = 'none';
+saveDialog.style.zIndex = '1000';
+saveDialog.style.fontSize = '1em';
+saveDialog.style.minWidth = '220px';
+saveDialog.style.textAlign = 'center';
+
+const dialogDropdown = document.createElement('select');
+dialogDropdown.style.fontSize = '1em';
+dialogDropdown.style.padding = '4px 12px';
+dialogDropdown.style.borderRadius = '4px';
+dialogDropdown.style.marginRight = '8px';
+saveDialog.appendChild(dialogDropdown);
+
+const newOpt = document.createElement('option');
+newOpt.value = '__new__';
+newOpt.textContent = 'New...';
+dialogDropdown.appendChild(newOpt);
+
+const newNameInput = document.createElement('input');
+newNameInput.type = 'text';
+newNameInput.placeholder = 'New palette name';
+newNameInput.style.display = 'none';
+newNameInput.style.marginTop = '0.5em';
+saveDialog.appendChild(newNameInput);
+
+const dialogBtns = document.createElement('div');
+dialogBtns.style.marginTop = '1em';
+dialogBtns.style.display = 'flex';
+dialogBtns.style.flexDirection = 'row';
+dialogBtns.style.justifyContent = 'center';
+dialogBtns.style.gap = '1em';
+
+const confirmBtn = document.createElement('button');
+confirmBtn.textContent = 'Confirm';
+confirmBtn.style.padding = '4px 16px';
+confirmBtn.style.background = '#2a2a2a';
+confirmBtn.style.color = '#fff';
+confirmBtn.style.border = 'none';
+confirmBtn.style.borderRadius = '6px';
+confirmBtn.style.cursor = 'pointer';
+
+const cancelBtn = document.createElement('button');
+cancelBtn.textContent = 'Cancel';
+cancelBtn.style.padding = '4px 16px';
+cancelBtn.style.background = '#444';
+cancelBtn.style.color = '#fff';
+cancelBtn.style.border = 'none';
+cancelBtn.style.borderRadius = '6px';
+cancelBtn.style.cursor = 'pointer';
+dialogBtns.appendChild(confirmBtn);
+dialogBtns.appendChild(cancelBtn);
+saveDialog.appendChild(dialogBtns);
+document.body.appendChild(saveDialog);
+
+function updateDialogDropdown() {
+  if (dialogDropdown.value === '__new__') {
+    newNameInput.style.display = '';
+  } else {
+    newNameInput.style.display = 'none';
+  }
+}
+dialogDropdown.addEventListener('change', updateDialogDropdown);
+
+// Ensure saveCurveBtn is defined before attaching event handler
+const saveCurveBtn = document.getElementById('save-curve-btn');
+saveCurveBtn.addEventListener('click', function(e) {
+  // Populate dropdown with palettes + New...
+  dialogDropdown.innerHTML = '';
+  Object.keys(noiseCurvesData).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    dialogDropdown.appendChild(opt);
+  });
+  dialogDropdown.appendChild(newOpt);
+  dialogDropdown.value = paletteDropdown.value;
+  updateDialogDropdown();
+  newNameInput.value = '';
+  // Position dialog below Save Curve button
+  const rect = saveCurveBtn.getBoundingClientRect();
+  saveDialog.style.left = (rect.left + window.scrollX) + 'px';
+  saveDialog.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+  saveDialog.style.display = 'block';
+});
+
+cancelBtn.addEventListener('click', function() {
+  saveDialog.style.display = 'none';
+});
+
+confirmBtn.addEventListener('click', function() {
+  let name;
+  if (dialogDropdown.value === '__new__') {
+    name = newNameInput.value.trim();
+    if (!name) {
+      alert('Please enter a name.');
+      return;
+    }
+    if (noiseCurvesData[name]) {
+      alert('Name already exists.');
+      return;
+    }
+    // Add new option to dropdowns
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    paletteDropdown.appendChild(opt);
+    dialogDropdown.insertBefore(opt.cloneNode(true), newOpt);
+  } else {
+    name = dialogDropdown.value;
+  }
+  // Get blend and curve data
+  const blendRatio = parseInt(blendSlider.value, 10);
+  let curvePoints = [];
+  if (curveWidget && curveWidget.chart && curveWidget.chart.data && curveWidget.chart.data.datasets[0]) {
+    curvePoints = curveWidget.chart.data.datasets[0].data.map(pt => ({ x: pt.x, y: pt.y }));
+  }
+  // Update JSON
+  noiseCurvesData[name] = {
+    blend_ratio: blendRatio,
+    curve_points: curvePoints
+  };
+  // Upload JSON
+  const jsonStr = JSON.stringify(noiseCurvesData, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  var xhttp = new XMLHttpRequest();
+  xhttp.open('POST', '/upload/Noise_Curves.json', true);
+  xhttp.send(blob);
+  xhttp.onload = function() {
+    if (xhttp.status === 200) {
+      alert('Curve and blend saved for ' + name + '!');
+      paletteDropdown.value = name;
+      paletteDropdown.dispatchEvent(new Event('change'));
+      saveDialog.style.display = 'none';
+    } else {
+      alert('Failed to save curve and blend for ' + name);
+    }
+  };
+});
         </script>
 </body>
 </html>

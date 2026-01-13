@@ -58,7 +58,7 @@ static void heartbeat_set_brightness(uint8_t b)
     heartbeat_brightness = b;
 }
 
-static const rgb_anim_t heartbeat_plugin = {
+static const hsv_anim_t heartbeat_plugin = {
     .begin = heartbeat_begin,
     .step = heartbeat_step,
     .set_color = heartbeat_set_color,

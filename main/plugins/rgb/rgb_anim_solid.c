@@ -28,7 +28,7 @@ static void solid_set_brightness(uint8_t b)
     solid_brightness = b;
 }
 
-static const rgb_anim_t solid_plugin = {
+static const hsv_anim_t solid_plugin = {
     .begin = solid_begin,
     .step = solid_step,
     .set_color = solid_set_color,

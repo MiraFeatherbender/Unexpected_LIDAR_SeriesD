@@ -55,7 +55,7 @@ static void water_set_brightness(uint8_t b) {
     water_composer_config.user_brightness = b;
 }
 
-static const rgb_anim_t water_plugin = {
+static const hsv_anim_t water_plugin = {
     .begin = water_begin,
     .step = water_step,
     .set_color = water_set_color,

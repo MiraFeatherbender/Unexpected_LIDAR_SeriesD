@@ -15,7 +15,7 @@
             wrapper.style.display = 'flex';
             wrapper.style.flexDirection = 'column';
             wrapper.style.alignItems = 'center';
-            wrapper.style.margin = '2em 0';
+            wrapper.style.margin = '8px 0';
             const canvas = document.createElement('canvas');
             canvas.width = width; canvas.height = height;
             canvas.style.background = '#181818';
