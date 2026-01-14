@@ -14,15 +14,6 @@
 static battery_rgb_tier_t *tiers = NULL;
 static size_t num_tiers = 0;
 
-// Helper: map plugin string to rgb_plugin_id_t
-static int plugin_name_to_id(const char *name) {
-    for (int i = 0; i < RGB_PLUGIN_MAX; ++i) {
-        if (strcmp(name, rgb_plugin_names[i] + 11) == 0) // skip "RGB_PLUGIN" prefix
-            return i;
-    }
-    return -1;
-}
-
 // Helper: parse one array (charging/discharging)
 static int parse_tier_array(cJSON *arr, bool vbus_required, battery_rgb_tier_t *out, int max) {
     int count = 0;
@@ -32,10 +23,7 @@ static int parse_tier_array(cJSON *arr, bool vbus_required, battery_rgb_tier_t *
         battery_rgb_tier_t t = {0};
         t.vbus_required = vbus_required;
         t.min_voltage = (float)cJSON_GetObjectItem(item, "min_voltage")->valuedouble;
-        const char *plugin_str = cJSON_GetObjectItem(item, "plugin")->valuestring;
-        int plugin_id = plugin_name_to_id(plugin_str);
-        if (plugin_id < 0) continue;
-        t.plugin = (uint8_t)plugin_id;
+        t.plugin = (uint8_t)cJSON_GetObjectItem(item, "plugin")->valueint;
         t.h = (uint8_t)cJSON_GetObjectItem(item, "h")->valueint;
         t.s = (uint8_t)cJSON_GetObjectItem(item, "s")->valueint;
         t.v = (uint8_t)cJSON_GetObjectItem(item, "v")->valueint;
@@ -49,7 +37,6 @@ const battery_rgb_tier_t *battery_json_get_tiers(size_t *out_num) {
     if (out_num) *out_num = num_tiers;
     return tiers;
 }
-
 
 int battery_json_reload(void) {
     if (!io_fatfs_file_exists(BATTERY_JSON_PATH)) {

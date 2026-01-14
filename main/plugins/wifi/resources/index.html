@@ -76,6 +76,8 @@
                     </div>
                     <button id="apply-btn" style="margin-top:1.5em; padding:0.5em 2em; font-size:1.1em; background:#2a2a2a; color:#fff; border:none; border-radius:6px; cursor:pointer;">Apply</button>
                 </div>
+                <!-- Battery Levels Editor Modal Button -->
+                <button id="battery-levels-modal-btn" style="margin-top:2em; padding:0.7em 2em; background:#333; color:#eee; border:none; border-radius:6px; font-size:1em; cursor:pointer;">Edit Battery Levels</button>
             </div>
         </div>
 
@@ -126,6 +128,13 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal for Battery Levels Widget -->
+<div id="battery-levels-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:transparent; z-index:1000; pointer-events:none;">
+  <div style="background:#181818; border-radius:12px; padding:2em; min-width:420px; max-width:900px; position:absolute; top:50px; right:50px; box-shadow:0 4px 24px #000; pointer-events:auto;">
+    <div id="battery-levels-widget-container"></div>
+  </div>
+</div>
 
         <script>
     // --- Blended Canvas Logic with Curve Widget ---
@@ -291,9 +300,14 @@
           .then(res => res.json())
           .then(json => {
             noiseCurvesData = json;
+            // Expose palette names and trimmed names globally for widgets
+            window.paletteNames = Object.keys(noiseCurvesData);
+            window.paletteNamesTrimmed = window.paletteNames.map(
+              name => name.substring(name.lastIndexOf('_') + 1)
+            );
             const paletteDropdown = document.getElementById('noise-palette-dropdown');
             paletteDropdown.innerHTML = '';
-            Object.keys(noiseCurvesData).forEach(name => {
+            window.paletteNames.forEach(name => {
               const opt = document.createElement('option');
               opt.value = name;
               opt.textContent = name;
@@ -485,5 +499,42 @@ confirmBtn.addEventListener('click', function() {
   };
 });
         </script>
+<script src="battery_levels_widget.js"></script>
+<script>
+function openBatteryLevelsModal() {
+  document.getElementById('battery-levels-modal').style.display = 'flex';
+  // Only create widget if not already present
+  if (!document.getElementById('battery-levels-widget-container').hasChildNodes()) {
+    createBatteryLevelsWidget(document.getElementById('battery-levels-widget-container'), {
+      onSave: function(blob) {
+        // Save to server using POST, like curve save
+        var xhttp = new XMLHttpRequest();
+        xhttp.open('POST', '/upload/Battery_Levels.json', true);
+        xhttp.onload = function() {
+          if (xhttp.status === 200) {
+            alert('Battery_Levels.json uploaded successfully!');
+            closeBatteryLevelsModal();
+          } else {
+            alert('Failed to upload Battery_Levels.json');
+          }
+        };
+        xhttp.onerror = function() {
+          alert('Error uploading Battery_Levels.json');
+        };
+        xhttp.send(blob);
+      },
+      onCancel: function() {
+        closeBatteryLevelsModal();
+      }
+    });
+  }
+}
+function closeBatteryLevelsModal() {
+  document.getElementById('battery-levels-modal').style.display = 'none';
+  // Do NOT clear widget container, so data remains for next use
+  // document.getElementById('battery-levels-widget-container').innerHTML = '';
+}
+document.getElementById('battery-levels-modal-btn').onclick = openBatteryLevelsModal;
+</script>
 </body>
 </html>
