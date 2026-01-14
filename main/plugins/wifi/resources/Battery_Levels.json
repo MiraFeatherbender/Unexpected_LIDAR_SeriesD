@@ -1,0 +1,12 @@
+{
+  "charging": [
+    { "min_voltage": 0.0,  "plugin": "WATER",   "h": 130, "s": 0,   "v": 0,   "brightness": 40 },
+    { "min_voltage": 3.7,  "plugin": "WATER",   "h": 130, "s": 0,   "v": 0,   "brightness": 40 },
+    { "min_voltage": 4.0,  "plugin": "AURORA",  "h": 84,  "s": 0,   "v": 0,   "brightness": 30 }
+  ],
+  "discharging": [
+    { "min_voltage": 0.0,  "plugin": "HEARTBEAT", "h": 0,  "s": 255, "v": 255, "brightness": 255 },
+    { "min_voltage": 3.3,  "plugin": "FIRE",      "h": 15, "s": 255, "v": 215, "brightness": 179 },
+    { "min_voltage": 3.6,  "plugin": "BREATHE",   "h": 88, "s": 255, "v": 220, "brightness": 255 }
+  ]
+}

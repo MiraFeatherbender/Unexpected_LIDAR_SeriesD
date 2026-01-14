@@ -26,6 +26,9 @@ idf_component_register(
         # WiFi sources
         "plugins/wifi/wifi_http_server.c"
 
+        # Battery sources
+        "plugins/battery/battery_json.c"
+
         # Library sources
         "src/UMSeriesD_idf.c"
 
@@ -50,6 +53,7 @@ idf_component_register(
         "plugins/rgb"     # rgb_anim*.h
         "plugins/RPLIDAR" # lidar_*.h
         "plugins/wifi"    # wifi_*.h
+        "plugins/battery" # battery_json.h
         "src"             # UMSeriesD_idf.h
 )
 

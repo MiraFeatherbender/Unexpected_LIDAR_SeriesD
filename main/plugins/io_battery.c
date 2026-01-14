@@ -2,6 +2,7 @@
 #include "dispatcher.h"
 #include "rgb_anim.h"
 #include "UMSeriesD_idf.h"
+#include "battery_json.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -29,33 +30,42 @@ static int battery_percent_from_voltage(float v)
 
 
 // Central struct for RGB plugin, HSV, and brightness per tier
-typedef struct {
-    float min_voltage;
-    bool vbus_required; // true: charging, false: discharging
-    uint8_t plugin;
-    uint8_t h, s, v, brightness;
-} battery_rgb_tier_t;
+// typedef struct {
+//     float min_voltage;
+//     bool vbus_required; // true: charging, false: discharging
+//     uint8_t plugin;
+//     uint8_t h, s, v, brightness;
+// } battery_rgb_tier_t;
 
 static const battery_rgb_tier_t battery_rgb_tiers[] = {
     // Charging tiers
-    
-    { 0.0f,  true, RGB_PLUGIN_WATER,     130,   0,   0,   40 }, // Charging, low voltage
-    { 3.7f,  true, RGB_PLUGIN_WATER,     130,   0,   0,   40 }, // Charging, mid voltage
-    { 4.0f,  true, RGB_PLUGIN_AURORA,     84,   0,   0,   30 }, // Charging, full
+    { 0.0f,  true, RGB_PLUGIN_WATER,     130,   0,   0,   40 },
+    { 3.7f,  true, RGB_PLUGIN_WATER,     130,   0,   0,   40 },
+    { 4.0f,  true, RGB_PLUGIN_AURORA,     84,   0,   0,   30 },
     // Discharging tiers
-    { 0.0f, false, RGB_PLUGIN_HEARTBEAT,   0, 255, 255,  255 }, // Discharging, low
-    { 3.3f, false, RGB_PLUGIN_FIRE,       15, 255, 215,  179 }, // Discharging, medium
-    { 3.6f, false, RGB_PLUGIN_BREATHE,    88, 255, 220,  255 }, // Discharging, high
+    { 0.0f, false, RGB_PLUGIN_HEARTBEAT,   0, 255, 255,  255 },
+    { 3.3f, false, RGB_PLUGIN_FIRE,       15, 255, 215,  179 },
+    { 3.6f, false, RGB_PLUGIN_BREATHE,    88, 255, 220,  255 },
 };
 
 #define NUM_TIERS (sizeof(battery_rgb_tiers)/sizeof(battery_rgb_tiers[0]))
 
 // Select the appropriate RGB tier for the current voltage and VBUS state
 static const battery_rgb_tier_t* battery_get_rgb_tier(float voltage, bool vbus) {
-    const battery_rgb_tier_t* selected = NULL;
-    for (size_t i = 0; i < NUM_TIERS; ++i) {
-        if (battery_rgb_tiers[i].vbus_required == vbus && voltage >= battery_rgb_tiers[i].min_voltage) {
-            selected = &battery_rgb_tiers[i];
+    size_t num_json_tiers = 0;
+    const battery_rgb_tier_t *json_tiers = battery_json_get_tiers(&num_json_tiers);
+    const battery_rgb_tier_t *selected = NULL;
+    if (json_tiers && num_json_tiers > 0) {
+        for (size_t i = 0; i < num_json_tiers; ++i) {
+            if (json_tiers[i].vbus_required == vbus && voltage >= json_tiers[i].min_voltage) {
+                selected = &json_tiers[i];
+            }
+        }
+    } else {
+        for (size_t i = 0; i < NUM_TIERS; ++i) {
+            if (battery_rgb_tiers[i].vbus_required == vbus && voltage >= battery_rgb_tiers[i].min_voltage) {
+                selected = &battery_rgb_tiers[i];
+            }
         }
     }
     return selected;
@@ -65,6 +75,9 @@ void io_battery_init(void)
 {
     // Initialize MAX17048 fuel gauge
     ums3_fg_setup();
+
+    // Try to load battery tiers from JSON at startup
+    battery_json_reload();
 
     // Create task
     xTaskCreate(io_battery_task,
