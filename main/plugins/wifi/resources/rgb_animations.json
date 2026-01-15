@@ -1,0 +1,61 @@
+{
+  "animations": [
+    {
+      "id": 4,
+      "palette": "HSV_PALETTE_WATER",
+      "contrast_noise_field": "openSimplex2",
+      "brightness_noise_field": "perlin",
+      "contrast_walk_spec": {
+        "min_dx": 0,
+        "max_dx": 1,
+        "min_dy": 0,
+        "max_dy": 1
+      },
+      "brightness_walk_spec": {
+        "min_dx": 0,
+        "max_dx": 6,
+        "min_dy": 0,
+        "max_dy": 3
+      },
+      "brightness_strategy": "value_noise"
+    },
+    {
+      "id": 3,
+      "palette": "HSV_PALETTE_AURORA",
+      "contrast_noise_field": "openSimplex2",
+      "brightness_noise_field": "perlin",
+      "contrast_walk_spec": {
+        "min_dx": -1,
+        "max_dx": 1,
+        "min_dy": 0,
+        "max_dy": 1
+      },
+      "brightness_walk_spec": {
+        "min_dx": -1,
+        "max_dx": 1,
+        "min_dy": 0,
+        "max_dy": 1
+      },
+      "brightness_strategy": "value_noise"
+    },
+    {
+      "id": 2,
+      "palette": "HSV_PALETTE_FIRE",
+      "contrast_noise_field": "openSimplex2",
+      "brightness_noise_field": "perlin",
+      "contrast_walk_spec": {
+        "min_dx": 0,
+        "max_dx": 1,
+        "min_dy": 0,
+        "max_dy": 3
+      },
+      "brightness_walk_spec": {
+        "min_dx": 0,
+        "max_dx": 1,
+        "min_dy": 0,
+        "max_dy": 3
+      },
+      "brightness_strategy": "index"
+    }
+  ]
+}

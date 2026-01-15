@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RGB Animations JSON Editor</title>
+  <style>
+    body {
+      background: #181a1b;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 260px;
+      margin: 40px auto;
+      background: #23272a;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px #000a;
+      padding: 10px 12px;
+    }
+    h1 {
+      color: #7ecfff;
+      margin-bottom: 24px;
+    }
+    label {
+      display: block;
+      margin: 2px 0 2px 0;
+      color: #b0b8c1;
+    }
+    input[type="number"], input[type="text"] {
+      background: #181a1b;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 1em;
+      margin-bottom: 8px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    select {
+      background: #181a1b;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 5px 6px;
+      font-size: 1em;
+      margin-bottom: 8px;
+      max-width: 220px;
+      min-width: 120px;
+      min-width: 60px;
+      width: auto;
+      box-sizing: border-box;
+      display: inline-block;
+    }
+    input[type="file"] {
+      color: #e0e0e0;
+      margin-bottom: 8px;
+    }
+    .anim-block {
+      background: #23272a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      padding: 4px 16px 18px 16px;
+      box-shadow: inset 0 2px 8px #181a1b, inset 0 1.5px 0 #444;
+    }
+    .btn {
+      background: #7ecfff;
+      color: #181a1b;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 17px;
+      font-size: 1em;
+      cursor: pointer;
+      margin-top: 12px;
+      margin-right: 8px;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #5bb0e6;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+    }
+    .row > div {
+      flex: 1;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #333;
+      margin: 24px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="margin-bottom: 18px;">
+      <label for="animIdSelect" style="display:block; text-align:center;">Select Animation</label>
+      <div style="text-align:center; margin-bottom:2px;">
+        <select id="animIdSelect" onchange="selectAnimation(this.value)"></select>
+      </div>
+      <div style="text-align:center; margin-top:8px;">
+        <button class="btn" onclick="showAddAnimModal()">Add</button>
+        <!-- Add Animation Modal -->
+        <div id="addAnimModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center;">
+          <div style="background:#23272a; color:#e0e0e0; border-radius:10px; box-shadow:0 2px 16px #000a; padding:32px 28px; min-width:320px; max-width:90vw; margin:auto; position:relative; top:15vh;">
+            <h2 style="margin-top:0; color:#7ecfff;">Add Animation</h2>
+            <label for="modalAnimIdSelect">Select Animation</label>
+            <select id="modalAnimIdSelect" style="width:100%; margin-bottom:18px;"></select>
+            <div style="text-align:right;">
+              <button class="btn" onclick="confirmAddAnimation()">Confirm</button>
+              <button class="btn" onclick="hideAddAnimModal()" style="background:#444; color:#eee;">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn" onclick="removeCurrentAnimation()" style="margin-right:4px;">Remove</button>
+        <button class="btn" onclick="downloadJson()">Save</button>
+      </div>
+    </div>
+    <div id="editorPanel"></div>
+  </div>
+  <script>
+// Helper to render a dropdown
+function renderDropdown(options, selected, onchange, style = '') {
+  return `<select onchange="${onchange}" style="${style}">
+    ${options.map(opt => `<option value="${opt}"${opt === selected ? ' selected' : ''}>${opt}</option>`).join('')}
+  </select>`;
+}
+
+// Helper to render the tab bar
+function renderTabBar(tabs, selectedTab, onClick) {
+  return `<div class="tab-bar" style="display:flex; gap:8px; margin:8px 0 4px 0; justify-content:center;">
+    ${tabs.map(tab => `<button class="tab-btn${selectedTab === tab ? ' active' : ''}"
+      style="${selectedTab === tab ? 'background:#36393f; border-bottom:2px solid #7289da; color:#7289da; font-weight:bold;' : 'background:#2c2f33; color:#8a929a; border:1px solid #444;'} border-radius:4px 4px 0 0; padding:6px 18px; font-size:14px; cursor:pointer; outline:none; margin-bottom:-1px;"
+      onclick="${onClick}('${tab}')">${tab.charAt(0).toUpperCase() + tab.slice(1)}</button>`).join('')}
+  </div>`;
+}
+
+// Helper to render walk spec grid
+function renderWalkSpecGrid(walkSpec, tab) {
+  return `<label>Walk Spec</label>
+    <div style="display: grid; grid-template-columns: 30px 1fr 1fr; grid-template-rows: 24px 1fr 1fr; gap: 2px; align-items: center; margin-top: 4px; margin-bottom: 8px;">
+      <div></div>
+      <div style="text-align:center; font-size: 0.95em; color: #b0b8c1;">min</div>
+      <div style="text-align:center; font-size: 0.95em; color: #b0b8c1;">max</div>
+      <div style="font-size: 0.95em; color: #b0b8c1;">dx</div>
+      <input type="number" style="width:75%;" value="${walkSpec.min_dx}" onchange="updateMimicWalk('${tab}', 'min_dx', this.valueAsNumber)">
+      <input type="number" style="width:75%;" value="${walkSpec.max_dx}" onchange="updateMimicWalk('${tab}', 'max_dx', this.valueAsNumber)">
+      <div style="font-size: 0.95em; color: #b0b8c1;">dy</div>
+      <input type="number" style="width:75%;" value="${walkSpec.min_dy}" onchange="updateMimicWalk('${tab}', 'min_dy', this.valueAsNumber)">
+      <input type="number" style="width:75%;" value="${walkSpec.max_dy}" onchange="updateMimicWalk('${tab}', 'max_dy', this.valueAsNumber)">
+    </div>`;
+}
+const BRIGHTNESS_STRATEGIES = ["value_noise", "index"];
+const NOISE_TYPES = ["openSimplex2", "perlin"];
+const PALETTES = ["HSV_PALETTE_WATER", "HSV_PALETTE_AURORA", "HSV_PALETTE_FIRE"];
+
+let animations = [];
+let selectedIdx = 0;
+let selectedTab = 'contrast'; // 'contrast' or 'brightness'
+
+async function loadAnimationsJson() {
+  try {
+    const resp = await fetch('rgb_animations.json');
+    if (!resp.ok) throw new Error('Failed to load JSON');
+    const data = await resp.json();
+    if (Array.isArray(data.animations)) {
+      animations = data.animations;
+      selectedIdx = 0;
+    } else {
+      animations = [];
+    }
+  } catch (e) {
+    animations = [];
+  }
+  render();
+}
+
+function updateModalAnimIdSelect() {
+  const used = new Set(animations.map(a => a.id));
+  const select = document.getElementById('modalAnimIdSelect');
+  let options = '';
+  for (let i = 0; i < 256; ++i) {
+    if (!used.has(i)) options += `<option value="${i}">${i}</option>`;
+  }
+  select.innerHTML = options;
+}
+
+function showAddAnimModal() {
+  updateModalAnimIdSelect();
+  document.getElementById('addAnimModal').style.display = 'flex';
+}
+function hideAddAnimModal() {
+  document.getElementById('addAnimModal').style.display = 'none';
+}
+function confirmAddAnimation() {
+  const select = document.getElementById('modalAnimIdSelect');
+  const newId = parseInt(select.value);
+  if (isNaN(newId)) {
+    alert('No available IDs');
+    return;
+  }
+  animations.push({
+    id: newId,
+    palette: PALETTES[0],
+    brightness_noise_field: NOISE_TYPES[0],
+    contrast_walk_spec: { min_dx: 0, max_dx: 0, min_dy: 0, max_dy: 0 },
+    brightness_walk_spec: { min_dx: 0, max_dx: 0, min_dy: 0, max_dy: 0 },
+    brightness_strategy: BRIGHTNESS_STRATEGIES[0]
+  });
+  selectedIdx = animations.length - 1;
+  hideAddAnimModal();
+  render();
+}
+
+function render() {
+  // Render ID dropdown
+  const idSelect = document.getElementById('animIdSelect');
+  idSelect.style.width = '220px';
+  idSelect.style.setProperty('width', '220px', 'important');
+  idSelect.innerHTML = animations.map((a, i) => `<option value="${i}"${i === selectedIdx ? ' selected' : ''}>ID ${a.id}</option>`).join('');
+  // Render editor panel for selected animation
+  const panel = document.getElementById('editorPanel');
+  if (animations.length === 0) {
+    panel.innerHTML = '<div style="color:#888;">No animations. Add one to begin.</div>';
+    return;
+  }
+  const anim = animations[selectedIdx];
+
+  // Tab bar
+  const tabBar = renderTabBar(['contrast', 'brightness'], selectedTab, 'setTab');
+
+  // Mimic fields wired to data
+  let mimicNoise, mimicWalk;
+  if (selectedTab === 'contrast') {
+    mimicNoise = anim.contrast_noise_field;
+    mimicWalk = anim.contrast_walk_spec;
+  } else {
+    mimicNoise = anim.brightness_noise_field;
+    mimicWalk = anim.brightness_walk_spec;
+  }
+
+  const mimicFields = `
+    <div class="anim-block" style="background:none; box-shadow:none; border:none; padding:0; margin-bottom:0;">
+      <label style="margin-top:0;">Noise</label>
+      <div style="text-align:center;">
+        ${renderDropdown(NOISE_TYPES, mimicNoise, `updateNoiseField('${selectedTab}', this.value)`, "width:220px !important; display:block; margin:auto;")}
+      </div>
+      ${renderWalkSpecGrid(mimicWalk, selectedTab)}
+    </div>
+  `;
+// Make updateMimicWalk globally available for walk spec editing
+function updateMimicWalk(tab, subfield, value) {
+  if (tab === 'contrast') {
+    animations[selectedIdx].contrast_walk_spec[subfield] = value;
+  } else {
+    animations[selectedIdx].brightness_walk_spec[subfield] = value;
+  }
+  render();
+}
+window.updateMimicWalk = updateMimicWalk;
+// Make updateNoiseField globally available for the dropdown
+function updateNoiseField(tab, value) {
+  if (tab === 'contrast') {
+    animations[selectedIdx].contrast_noise_field = value;
+  } else {
+    animations[selectedIdx].brightness_noise_field = value;
+  }
+  render();
+}
+window.updateNoiseField = updateNoiseField;
+
+  panel.innerHTML = `
+    <div class="anim-block">
+      <label>Palette</label>
+      <div style="text-align:center;">
+        ${renderDropdown(PALETTES, anim.palette, `updateField(${selectedIdx}, 'palette', this.value)`, "width:220px !important; display:block; margin:auto;")}
+      </div>
+      ${tabBar}
+      <div style="height:8px;"></div>
+      ${mimicFields}
+      ${selectedTab === 'brightness' ? `
+        <label>Brightness Strategy</label>
+        <div style="text-align:center;">
+          ${renderDropdown(BRIGHTNESS_STRATEGIES, anim.brightness_strategy, `updateField(${selectedIdx}, 'brightness_strategy', this.value)`, "width:220px !important; display:block; margin:auto;")}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+
+// Make setTab available before render() is called
+function setTab(tab) {
+  selectedTab = tab;
+  render();
+}
+window.setTab = setTab;
+function updateField(idx, field, value) {
+  animations[idx][field] = value;
+  render();
+}
+function updateWalk(idx, walk, subfield, value) {
+  animations[idx][walk][subfield] = value;
+  render();
+}
+function selectAnimation(idx) {
+  selectedIdx = parseInt(idx);
+  render();
+}
+function removeCurrentAnimation() {
+  if (animations.length === 0) return;
+  animations.splice(selectedIdx, 1);
+  if (selectedIdx >= animations.length) selectedIdx = animations.length - 1;
+  render();
+}
+function downloadJson() {
+  const json = JSON.stringify({ animations }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rgb_animations.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+document.addEventListener('DOMContentLoaded', loadAnimationsJson);
+  </script>
+</body>
+</html>

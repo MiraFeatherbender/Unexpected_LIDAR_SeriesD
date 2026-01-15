@@ -29,7 +29,17 @@
             <div class="col">
                 <!-- Duplicate HSV Preview Canvas (above HSV Curve Editor) -->
                 <div id="hsv-preview-panel" class="panel" style="padding-bottom:0.5em; min-width:750px; max-width:1000px; align-items:center;">
-                    <canvas id="hsv-preview-canvas" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px; display:block; margin-left:auto; margin-right:auto;"></canvas>
+                    <div style="display: flex; flex-direction: row; justify-content: center; align-items: flex-start; width:100%;">
+                        <canvas id="hsv-preview-canvas" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px; margin: 0 32px;"></canvas>
+                        <canvas id="ledSim" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px; margin: 0 32px;"></canvas>
+                    </div>
+                    <div style="margin-top:18px; display:flex; flex-direction:row; justify-content:center; align-items:center; gap:10px;">
+                        <label>min_dx: <input type="number" id="min_dx" value="-1" style="width:40px;"></label>
+                        <label>max_dx: <input type="number" id="max_dx" value="1" style="width:40px;"></label>
+                        <label>min_dy: <input type="number" id="min_dy" value="0" style="width:40px;"></label>
+                        <label>max_dy: <input type="number" id="max_dy" value="1" style="width:40px;"></label>
+                        <button id="updateWalk">Update Walk Spec</button>
+                    </div>
                     <div style="color:#aaa; font-size:0.95em; margin-top:0.5em; text-align:center;">HSV Preview</div>
                 </div>
                 <!-- HSV Curve Editor Panel (left of blend-panel) -->
@@ -535,6 +545,65 @@ function closeBatteryLevelsModal() {
   // document.getElementById('battery-levels-widget-container').innerHTML = '';
 }
 document.getElementById('battery-levels-modal-btn').onclick = openBatteryLevelsModal;
+</script>
+<script>
+// --- LED Simulation Logic ---
+let min_dx = -1, max_dx = 1, min_dy = 0, max_dy = 1;
+let x = 128, y = 128; // Start in the center
+let ledSimAnimFrame = null;
+let lastFrameTime = 0;
+const LED_SIM_FPS = 30;
+const LED_SIM_FRAME_MS = 1000 / LED_SIM_FPS;
+
+function stepWalk() {
+    x += Math.floor(Math.random() * (max_dx - min_dx + 1)) + min_dx;
+    y += Math.floor(Math.random() * (max_dy - min_dy + 1)) + min_dy;
+    x = ((x % 256) + 256) % 256;
+    y = ((y % 256) + 256) % 256;
+}
+
+function getColorFromCanvas(ctx, x, y) {
+    const pixel = ctx.getImageData(x, y, 1, 1).data;
+    return `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+}
+
+function drawLedSim() {
+    const colorCanvas = document.getElementById('hsv-preview-canvas');
+    const ledSim = document.getElementById('ledSim');
+    const colorCtx = colorCanvas.getContext('2d');
+    const ledCtx = ledSim.getContext('2d');
+    ledCtx.clearRect(0, 0, 256, 256);
+    const color = getColorFromCanvas(colorCtx, x, y);
+    ledCtx.beginPath();
+    ledCtx.arc(128, 128, 40, 0, 2 * Math.PI);
+    ledCtx.fillStyle = color;
+    ledCtx.shadowColor = color;
+    ledCtx.shadowBlur = 30;
+    ledCtx.fill();
+    ledCtx.shadowBlur = 0;
+}
+
+function animateLedSim(now) {
+    if (!lastFrameTime || now - lastFrameTime >= LED_SIM_FRAME_MS) {
+        stepWalk();
+        drawLedSim();
+        lastFrameTime = now;
+    }
+    ledSimAnimFrame = requestAnimationFrame(animateLedSim);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('updateWalk').onclick = function() {
+        min_dx = parseInt(document.getElementById('min_dx').value, 10);
+        max_dx = parseInt(document.getElementById('max_dx').value, 10);
+        min_dy = parseInt(document.getElementById('min_dy').value, 10);
+        max_dy = parseInt(document.getElementById('max_dy').value, 10);
+    };
+    if (ledSimAnimFrame) cancelAnimationFrame(ledSimAnimFrame);
+    lastFrameTime = 0;
+    animateLedSim(performance.now());
+});
+// --- End LED Simulation Logic ---
 </script>
 </body>
 </html>
