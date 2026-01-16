@@ -510,10 +510,38 @@ confirmBtn.addEventListener('click', function() {
   xhttp.send(blob);
   xhttp.onload = function() {
     if (xhttp.status === 200) {
-      alert('Curve and blend saved for ' + name + '!');
-      paletteDropdown.value = name;
-      paletteDropdown.dispatchEvent(new Event('change'));
-      saveDialog.style.display = 'none';
+      // Now also save the blend-canvas as PNG to images/<name>_Noise_Contrast.png
+      try {
+        const canvas = document.getElementById('blend-canvas');
+        if (canvas) {
+          canvas.toBlob(function(pngBlob) {
+            if (!pngBlob) {
+              alert('Failed to create PNG blob from canvas.');
+              return;
+            }
+            const imgXhr = new XMLHttpRequest();
+            const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+            // Use images/<name>_Noise_Contrast.png so backend saves to images directory
+            const fileName = 'images/' + safeName + '_Noise_Contrast.png';
+            imgXhr.open('POST', '/upload/' + fileName, true);
+            imgXhr.send(pngBlob);
+            imgXhr.onload = function() {
+              if (imgXhr.status === 200) {
+                alert('Curve/blend and PNG saved for ' + name + '!');
+                paletteDropdown.value = name;
+                paletteDropdown.dispatchEvent(new Event('change'));
+                saveDialog.style.display = 'none';
+              } else {
+                alert('Curve/blend saved, but failed to save PNG for ' + name);
+              }
+            };
+          }, 'image/png');
+        } else {
+          alert('Curve/blend saved, but blend-canvas not found.');
+        }
+      } catch (e) {
+        alert('Curve/blend saved, but error saving PNG: ' + e);
+      }
     } else {
       alert('Failed to save curve and blend for ' + name);
     }

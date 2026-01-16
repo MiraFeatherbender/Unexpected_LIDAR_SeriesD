@@ -29,6 +29,9 @@
     const PALETTES = window.Palette_PNG_List || ["HSV_PALETTE_WATER", "HSV_PALETTE_AURORA", "HSV_PALETTE_FIRE"];
     const CONTRAST_NOISE = window.Contrast_PNG_List || ["openSimplex2", "perlin"];
     const BRIGHTNESS_NOISE = window.Brightness_PNG_List || ["openSimplex2", "perlin"];
+    // For default fields in Add, use union of both noise lists (or fallback)
+    const NOISE_TYPES = Array.from(new Set([...(window.Contrast_PNG_List||[]), ...(window.Brightness_PNG_List||[])]));
+    if (NOISE_TYPES.length === 0) NOISE_TYPES.push("openSimplex2", "perlin");
 
     function renderAnimationDropdown() {
       // Use idNameList if provided, otherwise fallback to ID only
@@ -151,16 +154,22 @@
           let opts = '';
           paletteIdNameList.forEach(entry => {
             if (!used.has(entry.id)) {
-              opts += `<option value=\"${entry.id}\">${entry.id}: ${entry.name}</option>`;
+              opts += `<option value="${entry.id}">${entry.id}: ${entry.name}</option>`;
             }
           });
           modalAnimIdSelect.innerHTML = opts;
           addAnimModal.style.display = 'flex';
+          // Disable confirm if no options
+          confirmAddAnimBtn.disabled = (modalAnimIdSelect.options.length === 0);
         };
         cancelAddAnimBtn.onclick = function() {
           addAnimModal.style.display = 'none';
         };
         confirmAddAnimBtn.onclick = function() {
+          if (modalAnimIdSelect.options.length === 0) {
+            alert('No available IDs');
+            return;
+          }
           const newId = parseInt(modalAnimIdSelect.value);
           if (isNaN(newId)) {
             alert('No available IDs');
@@ -171,6 +180,7 @@
             id: newId,
             palette: PALETTES[0],
             brightness_noise_field: NOISE_TYPES[0],
+            contrast_noise_field: NOISE_TYPES[0],
             contrast_walk_spec: { min_dx: 0, max_dx: 0, min_dy: 0, max_dy: 0 },
             brightness_walk_spec: { min_dx: 0, max_dx: 0, min_dy: 0, max_dy: 0 },
             brightness_strategy: BRIGHTNESS_STRATEGIES[0]
@@ -206,15 +216,20 @@
               }
             },
             saveJson: function() {
-              // Download JSON as a file
+              // Upload JSON to server via POST (like uploadPalettesJSON)
               const jsonStr = JSON.stringify({ animations }, null, 2);
               const blob = new Blob([jsonStr], { type: 'application/json' });
-              const a = document.createElement('a');
-              a.href = URL.createObjectURL(blob);
-              a.download = 'rgb_animations.json';
-              document.body.appendChild(a);
-              a.click();
-              setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 500);
+              const fileName = 'rgb_animations.json';
+              var xhttp = new XMLHttpRequest();
+              xhttp.open('POST', '/upload/' + encodeURIComponent(fileName), true);
+              xhttp.send(blob);
+              xhttp.onload = function() {
+                if (xhttp.status === 200) {
+                  alert('Animations JSON uploaded!');
+                } else {
+                  alert('Failed to upload animations JSON.');
+                }
+              };
             },
       setTab: function(tab) { selectedTab = tab; render(); },
       updateField: function(idx, field, value) { animations[idx][field] = value; render(); },
