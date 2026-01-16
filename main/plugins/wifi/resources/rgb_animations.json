@@ -2,7 +2,7 @@
   "animations": [
     {
       "id": 4,
-      "palette": "HSV_PALETTE_WATER",
+      "palette": "Water_Palette.png",
       "contrast_noise_field": "openSimplex2",
       "brightness_noise_field": "perlin",
       "contrast_walk_spec": {
@@ -21,7 +21,7 @@
     },
     {
       "id": 3,
-      "palette": "HSV_PALETTE_AURORA",
+      "palette": "Aurora_Palette.png",
       "contrast_noise_field": "openSimplex2",
       "brightness_noise_field": "perlin",
       "contrast_walk_spec": {
@@ -41,8 +41,8 @@
     {
       "id": 2,
       "palette": "HSV_PALETTE_FIRE",
-      "contrast_noise_field": "openSimplex2",
-      "brightness_noise_field": "perlin",
+      "contrast_noise_field": "Fire_Noise_Contrast.png",
+      "brightness_noise_field": "Fire_Noise_Brightness.png",
       "contrast_walk_spec": {
         "min_dx": 0,
         "max_dx": 1,

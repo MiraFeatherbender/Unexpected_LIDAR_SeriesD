@@ -289,7 +289,33 @@ static esp_err_t rgb_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-
+static esp_err_t images_list_handler(httpd_req_t *req) {
+    char file_list[32][64]; // Up to 32 files, 63 chars each
+    int count = io_fatfs_list_files("/data/images", file_list, 32);
+    if (count < 0) {
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to list images");
+        return ESP_FAIL;
+    }
+    cJSON *root = cJSON_CreateArray();
+    for (int i = 0; i < count; ++i) {
+        // Only add .png, .jpg, .jpeg, .bmp, etc.
+        const char *ext = strrchr(file_list[i], '.');
+        if (ext && (
+            strcasecmp(ext, ".png") == 0 ||
+            strcasecmp(ext, ".jpg") == 0 ||
+            strcasecmp(ext, ".jpeg") == 0 ||
+            strcasecmp(ext, ".bmp") == 0
+        )) {
+            cJSON_AddItemToArray(root, cJSON_CreateString(file_list[i]));
+        }
+    }
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+    free(json);
+    return ESP_OK;
+}
 
 typedef esp_err_t (*http_handler_fn_t)(httpd_req_t *req);
 typedef struct {
@@ -331,6 +357,7 @@ void wifi_http_server_start(void)
 {
     if (server) return;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 8192; // or 4096, depending on your needs
     config.server_port = 80;
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
     ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
@@ -340,3 +367,4 @@ void wifi_http_server_start(void)
         ESP_LOGE(TAG, "Failed to start HTTP server");
     }
 }
+

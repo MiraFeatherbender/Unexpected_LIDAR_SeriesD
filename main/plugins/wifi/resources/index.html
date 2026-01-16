@@ -18,6 +18,7 @@
     <script src="chartjs-plugin-dragdata.min.js"></script>
     <script src="curve_widget.js"></script>
     <script src="hsv_curve_editor.js"></script>
+    <script src="rgbAnimationsEditor.js"></script>
 </head>
 <body>
     <h1>PNG Image Preview</h1>
@@ -88,6 +89,8 @@
                 </div>
                 <!-- Battery Levels Editor Modal Button -->
                 <button id="battery-levels-modal-btn" style="margin-top:2em; padding:0.7em 2em; background:#333; color:#eee; border:none; border-radius:6px; font-size:1em; cursor:pointer;">Edit Battery Levels</button>
+                <!-- New button to open Animation Parameters Editor -->
+                <button id="editAnimPluginBtn" style="margin-top:1em; padding:0.7em 2em; background:#333; color:#eee; border:none; border-radius:6px; font-size:1em; cursor:pointer;">Edit Animation Parameters</button>
             </div>
         </div>
 
@@ -145,6 +148,14 @@
     <div id="battery-levels-widget-container"></div>
   </div>
 </div>
+
+        <!-- Modal for RGB Animations Editor -->
+        <div id="rgbEditorModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center;">
+          <div style="background:#23272a; color:#e0e0e0; border-radius:10px; box-shadow:0 2px 16px #000a; padding:32px 28px; min-width:320px; max-width:90vw; margin:auto; position:relative; top:10vh;">
+            <button onclick="document.getElementById('rgbEditorModal').style.display='none'" style="position:absolute; top:8px; right:12px; background:#444; color:#eee; border:none; border-radius:4px; padding:4px 10px; cursor:pointer;">Close</button>
+            <div id="rgbEditorContainer"></div>
+          </div>
+        </div>
 
         <script>
     // --- Blended Canvas Logic with Curve Widget ---
@@ -511,6 +522,59 @@ confirmBtn.addEventListener('click', function() {
         </script>
 <script src="battery_levels_widget.js"></script>
 <script>
+// --- Plugin/Palette Association Dropdown Logic ---
+function toTitleCase(str) {
+  return str.replace(/\w\S*/g, function(txt) {
+    return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+  });
+}
+
+   // Always build the lists on DOMContentLoaded, independent of any dropdown
+   function buildRgbAnimationIdLists() {
+     Promise.all([
+       fetch('color_palettes.json').then(r => r.json()),
+       fetch('/api/rgbJSON').then(r => r.json())
+     ]).then(([paletteData, pluginData]) => {
+       // Palette names: keys of paletteData.presets or paletteData
+       const palettePresets = paletteData.presets ? paletteData.presets : paletteData;
+       const paletteNames = Object.keys(palettePresets);
+       // Plugin names: strip RGB_PLUGIN_ prefix
+       const plugins = (pluginData.plugins || []).map(p => ({
+         id: p.id,
+         name: p.name && p.name.startsWith('RGB_PLUGIN_') ? p.name.substring(11) : p.name
+       }));
+       // Normalize for matching
+       const paletteNamesLower = paletteNames.map(n => n.toLowerCase());
+       // Build TOTAL list: plugin names (stripped, original order) first, then palette names not already present (case-insensitive)
+       const totalNames = [];
+       const totalNamesLower = [];
+       plugins.forEach(p => {
+         totalNames.push(p.name);
+         totalNamesLower.push(p.name.toLowerCase());
+       });
+       paletteNames.forEach(name => {
+         if (!totalNamesLower.includes(name.toLowerCase())) {
+           totalNames.push(name);
+           totalNamesLower.push(name.toLowerCase());
+         }
+       });
+       // Expose the TOTAL list (with indices and names) globally for use in the RGB Animations Editor
+       // Also expose the filtered palette-based list
+       window.rgbAnimationIdNames = totalNames.map((name, idx) => ({ id: idx, name: toTitleCase(name) }));
+       window.rgbAnimationPaletteIdNames = totalNames.map((name, idx) => ({
+         id: idx,
+         name: toTitleCase(name),
+         isPaletteBased: paletteNamesLower.includes(name.toLowerCase())
+       })).filter(entry => entry.isPaletteBased);
+     }).catch(() => {
+       window.rgbAnimationIdNames = [];
+       window.rgbAnimationPaletteIdNames = [];
+     });
+   }
+   document.addEventListener('DOMContentLoaded', buildRgbAnimationIdLists);
+// Removed calls to updatePluginAssociationDropdown (function not defined)
+</script>
+<script>
 function openBatteryLevelsModal() {
   document.getElementById('battery-levels-modal').style.display = 'flex';
   // Only create widget if not already present
@@ -604,6 +668,82 @@ document.addEventListener('DOMContentLoaded', function() {
     animateLedSim(performance.now());
 });
 // --- End LED Simulation Logic ---
+</script>
+<script>
+document.getElementById('editAnimPluginBtn').onclick = function() {
+  document.getElementById('rgbEditorModal').style.display = 'flex';
+  // Only initialize once
+  if (!window.rgbEditorLoaded) {
+    window.rgbEditorLoaded = true;
+    fetch('rgb_animations.json')
+      .then(r => r.json())
+      .then(json => {
+        if (json && Array.isArray(json.animations)) {
+          createRgbAnimationsEditor(document.getElementById('rgbEditorContainer'), { animations: json.animations, idNameList: window.rgbAnimationIdNames, paletteIdNameList: window.rgbAnimationPaletteIdNames });
+        } else {
+          createRgbAnimationsEditor(document.getElementById('rgbEditorContainer'), { idNameList: window.rgbAnimationIdNames, paletteIdNameList: window.rgbAnimationPaletteIdNames });
+        }
+      })
+      .catch(() => {
+        createRgbAnimationsEditor(document.getElementById('rgbEditorContainer'), { idNameList: window.rgbAnimationIdNames });
+      });
+  }
+};
+</script>
+<script>
+// --- Populate List 1 and List 2 dropdowns with image file names from server endpoint ---
+function populateImageDropdowns() {
+  fetch('/api/images')
+    .then(r => r.json())
+    .then(list => {
+      // list should be an array of filenames
+      const list1 = document.getElementById('list1-dropdown');
+      const list2 = document.getElementById('list2-dropdown');
+      const list3 = document.getElementById('list3-dropdown');
+      // Expose filtered lists globally
+      window.Palette_PNG_List = list.filter(name => name.endsWith('_Palette.png'));
+      window.Contrast_PNG_List = list.filter(name => name.endsWith('_Contrast.png') || name === 'openSimplex2.png');
+      window.Brightness_PNG_List = list.filter(name => name.endsWith('_Brightness.png') || name === 'perlinNoise.png');
+
+      if (list1) {
+        list1.innerHTML = '';
+        window.Palette_PNG_List.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          list1.appendChild(opt);
+        });
+      }
+      if (list2) {
+        list2.innerHTML = '';
+        window.Contrast_PNG_List.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          list2.appendChild(opt);
+        });
+      }
+      if (list3) {
+        list3.innerHTML = '';
+        window.Brightness_PNG_List.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          list3.appendChild(opt);
+        });
+      }
+    })
+    .catch(() => {
+      // On error, clear dropdowns
+      const list1 = document.getElementById('list1-dropdown');
+      const list2 = document.getElementById('list2-dropdown');
+      const list3 = document.getElementById('list3-dropdown');
+      if (list1) list1.innerHTML = '';
+      if (list2) list2.innerHTML = '';
+      if (list3) list3.innerHTML = '';
+    });
+}
+document.addEventListener('DOMContentLoaded', populateImageDropdowns);
 </script>
 </body>
 </html>
