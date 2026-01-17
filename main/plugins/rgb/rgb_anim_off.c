@@ -5,8 +5,9 @@
 static hsv_color_t off_hsv = {0, 0, 0};
 static uint8_t off_brightness = 0;
 
-static void off_begin(void)
+static void off_begin(int idx)
 {
+    (void)idx;
     // No hardware calls; just reset state if needed
 }
 

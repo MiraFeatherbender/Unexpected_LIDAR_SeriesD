@@ -27,8 +27,9 @@ static const uint8_t heartbeat_ecg[256] = {48, 47, 45, 45, 45, 46, 48, 49, 49, 4
                                     43, 42, 41, 40, 40, 41, 42, 43, 43, 42, 41, 41, 41, 43, 44, 46, 
                                     46, 46, 45, 45, 45, 46, 47, 49, 49, 50, 50, 50, 50, 50, 51, 51, 50};
 
-static void heartbeat_begin(void)
+static void heartbeat_begin(int idx)
 {
+    (void)idx;
     heartbeat_phase = 0;
 }
 

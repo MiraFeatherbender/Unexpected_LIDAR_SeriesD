@@ -7,8 +7,9 @@ static uint8_t breathe_brightness = 255;
 static uint16_t breathe_phase = 0;
 static uint8_t breathe_speed = 3;   // default phase increment
 
-static void breathe_begin(void)
+static void breathe_begin(int idx)
 {
+    (void)idx;
     breathe_phase = 0;
 }
 

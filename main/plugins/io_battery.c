@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define BATTERY_TASK_STACK_SIZE 4096
+#define BATTERY_TASK_STACK_SIZE 8192
 #define BATTERY_TASK_PRIORITY   5
 #define BATTERY_CHECK_INTERVAL_MS 3000
 

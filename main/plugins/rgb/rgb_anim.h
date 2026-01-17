@@ -29,7 +29,7 @@ typedef struct {
 } hsv_color_t;
 
 typedef struct {
-    void (*begin)(void);                        // reset internal state
+    void (*begin)(int idx);                     // reset internal state, receives plugin index
     void (*step)(hsv_color_t *out_hsv);         // run one animation frame, output HSV
     void (*set_color)(hsv_color_t hsv);         // every plugin receives color in
     #define X_FIELD_HSV(name, ctype, jtype, desc);
@@ -46,7 +46,7 @@ typedef struct {
 } rgb_color_t;
 
 typedef struct {
-    void (*begin)(void);                        // reset internal state
+    void (*begin)(int idx);                     // reset internal state
     void (*step)(rgb_color_t *out_rgb);         // run one animation frame, output RGB
     void (*set_color)(rgb_color_t rgb);         // every plugin receives color in
     void (*set_brightness)(uint8_t b);          // every plugin receives master brightness
@@ -65,5 +65,11 @@ void io_rgb_set_anim_brightness(uint8_t b);
 // ---------------------------------------------------------
 void io_rgb_register_plugin(rgb_plugin_id_t id,
                             const hsv_anim_t *plugin);
+
+void io_rgb_register_hsv_plugin(rgb_plugin_id_t id,
+                                const hsv_anim_t *plugin);
+
+void io_rgb_register_rgb_plugin(rgb_plugin_id_t id,
+                                const rgb_anim_t *plugin);
 
 #endif // RGB_ANIM_H

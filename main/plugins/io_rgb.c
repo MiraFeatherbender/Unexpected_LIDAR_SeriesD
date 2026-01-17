@@ -18,11 +18,24 @@
 // Queue for incoming RGB commands
 static QueueHandle_t rgb_cmd_queue = NULL;
 
+typedef enum {
+    RGB_PLUGIN_TYPE_HSV = 0,
+    RGB_PLUGIN_TYPE_RGB = 1,
+} rgb_plugin_type_t;
+
+typedef struct {
+    rgb_plugin_type_t type;
+    union {
+        const hsv_anim_t *hsv;
+        const rgb_anim_t *rgb;
+    } plugin;
+} rgb_plugin_entry_t;
+
 // Plugin registry (dispatcher‑style)
-static const hsv_anim_t *rgb_plugins[RGB_PLUGIN_MAX] = {0};
+static rgb_plugin_entry_t rgb_plugins[RGB_PLUGIN_MAX] = {0};
 
 // Active plugin + current parameters
-static const hsv_anim_t *active_anim = NULL;
+static const rgb_plugin_entry_t *active_anim = NULL;
 static hsv_color_t current_hsv = {0, 0, 0};
 static uint8_t current_brightness = 255;
 
@@ -46,20 +59,32 @@ static void rgb_set_animation(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v
         (new_brightness != last_brightness);
 
     // Select plugin
-    active_anim = rgb_plugins[plugin_id];
+    active_anim = &rgb_plugins[plugin_id];
 
     if (active_anim) {
-        // Only reset animation when plugin changes
-        if (plugin_changed && active_anim->begin)
-            active_anim->begin();
+        if (active_anim->type == RGB_PLUGIN_TYPE_HSV && active_anim->plugin.hsv) {
+            // Only reset animation when plugin changes
+            if (plugin_changed && active_anim->plugin.hsv->begin)
+                active_anim->plugin.hsv->begin(plugin_id); // Pass plugin index
 
-        // Always push updated parameters when they change
-        if (params_changed) {
-            if (active_anim->set_color)
-                active_anim->set_color(new_hsv);
+            // Always push updated parameters when they change
+            if (params_changed) {
+                if (active_anim->plugin.hsv->set_color)
+                    active_anim->plugin.hsv->set_color(new_hsv);
 
-            if (active_anim->set_brightness)
-                active_anim->set_brightness(new_brightness);
+                if (active_anim->plugin.hsv->set_brightness)
+                    active_anim->plugin.hsv->set_brightness(new_brightness);
+            }
+        } else if (active_anim->type == RGB_PLUGIN_TYPE_RGB && active_anim->plugin.rgb) {
+            // Only reset animation when plugin changes
+            if (plugin_changed && active_anim->plugin.rgb->begin)
+                active_anim->plugin.rgb->begin(plugin_id); // Pass plugin index
+
+            // Ignore HSV color parameters for RGB plugins, but accept brightness
+            if (params_changed) {
+                if (active_anim->plugin.rgb->set_brightness)
+                    active_anim->plugin.rgb->set_brightness(new_brightness);
+            }
         }
     }
 
@@ -121,10 +146,25 @@ void hsv8_to_rgb888(uint8_t h, uint8_t s, uint8_t v,
 }
 
 // Registration API (mirrors dispatcher_register_handler)
+void io_rgb_register_hsv_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
+{
+    if (id < RGB_PLUGIN_MAX) {
+        rgb_plugins[id].type = RGB_PLUGIN_TYPE_HSV;
+        rgb_plugins[id].plugin.hsv = plugin;
+    }
+}
+
+void io_rgb_register_rgb_plugin(rgb_plugin_id_t id, const rgb_anim_t *plugin)
+{
+    if (id < RGB_PLUGIN_MAX) {
+        rgb_plugins[id].type = RGB_PLUGIN_TYPE_RGB;
+        rgb_plugins[id].plugin.rgb = plugin;
+    }
+}
+
 void io_rgb_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
 {
-    if (id < RGB_PLUGIN_MAX)
-        rgb_plugins[id] = plugin;
+    io_rgb_register_hsv_plugin(id, plugin);
 }
 
 // Forward declaration
@@ -284,15 +324,24 @@ static void io_rgb_task(void *arg)
         }
 
         // Run active animation and get HSV output
-        hsv_color_t out_hsv = current_hsv;
-        if (active_anim && active_anim->step)
-            active_anim->step(&out_hsv);
+        if (active_anim && active_anim->type == RGB_PLUGIN_TYPE_HSV && active_anim->plugin.hsv) {
+            hsv_color_t out_hsv = current_hsv;
+            if (active_anim->plugin.hsv->step)
+                active_anim->plugin.hsv->step(&out_hsv);
 
-        // Convert HSV to RGB and output
-        uint8_t r, g, b;
-        hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &r, &g, &b);
-        ums3_set_pixel_brightness(anim_brightness);
-        ums3_set_pixel_color(r, g, b);
+            // Convert HSV to RGB and output
+            uint8_t r, g, b;
+            hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &r, &g, &b);
+            ums3_set_pixel_brightness(anim_brightness);
+            ums3_set_pixel_color(r, g, b);
+        } else if (active_anim && active_anim->type == RGB_PLUGIN_TYPE_RGB && active_anim->plugin.rgb) {
+            rgb_color_t out_rgb = {0, 0, 0};
+            if (active_anim->plugin.rgb->step)
+                active_anim->plugin.rgb->step(&out_rgb);
+
+            ums3_set_pixel_brightness(anim_brightness);
+            ums3_set_pixel_color(out_rgb.r, out_rgb.g, out_rgb.b);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(33)); // ~30 FPS
     }

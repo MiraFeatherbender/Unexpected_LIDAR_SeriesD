@@ -3,8 +3,8 @@
     {
       "id": 4,
       "palette": "Water_Palette.png",
-      "contrast_noise_field": "openSimplex2",
-      "brightness_noise_field": "perlin",
+      "contrast_noise_field": "Pool_Noise_Contrast.png",
+      "brightness_noise_field": "perlinNoise.png",
       "contrast_walk_spec": {
         "min_dx": 0,
         "max_dx": 1,
@@ -22,8 +22,8 @@
     {
       "id": 3,
       "palette": "Aurora_Palette.png",
-      "contrast_noise_field": "openSimplex2",
-      "brightness_noise_field": "perlin",
+      "contrast_noise_field": "Aurora_Noise_Contrast.png",
+      "brightness_noise_field": "perlinNoise.png",
       "contrast_walk_spec": {
         "min_dx": -1,
         "max_dx": 1,
@@ -40,22 +40,79 @@
     },
     {
       "id": 2,
-      "palette": "HSV_PALETTE_FIRE",
+      "palette": "Fire_Palette.png",
       "contrast_noise_field": "Fire_Noise_Contrast.png",
       "brightness_noise_field": "Fire_Noise_Brightness.png",
       "contrast_walk_spec": {
-        "min_dx": 0,
-        "max_dx": 1,
-        "min_dy": 0,
-        "max_dy": 3
+        "min_dx": -2,
+        "max_dx": 0,
+        "min_dy": -2,
+        "max_dy": 1
       },
       "brightness_walk_spec": {
-        "min_dx": 0,
+        "min_dx": -1,
         "max_dx": 1,
+        "min_dy": -1,
+        "max_dy": 1
+      },
+      "brightness_strategy": "value_noise"
+    },
+    {
+      "id": 9,
+      "palette": "Pool_Palette.png",
+      "brightness_noise_field": "perlinNoise.png",
+      "contrast_noise_field": "Pool_Noise_Contrast.png",
+      "contrast_walk_spec": {
+        "min_dx": 0,
+        "max_dx": 2,
         "min_dy": 0,
+        "max_dy": 1
+      },
+      "brightness_walk_spec": {
+        "min_dx": -1,
+        "max_dx": 3,
+        "min_dy": -1,
         "max_dy": 3
       },
-      "brightness_strategy": "index"
+      "brightness_strategy": "value_noise"
+    },
+    {
+      "id": 8,
+      "palette": "Lightning_Palette.png",
+      "brightness_noise_field": "perlinNoise.png",
+      "contrast_noise_field": "Lightning_Noise_Contrast.png",
+      "contrast_walk_spec": {
+        "min_dx": -2,
+        "max_dx": 3,
+        "min_dy": -1,
+        "max_dy": 2
+      },
+      "brightness_walk_spec": {
+        "min_dx": -1,
+        "max_dx": 1,
+        "min_dy": -1,
+        "max_dy": 1
+      },
+      "brightness_strategy": "value_noise"
+    },
+    {
+      "id": 7,
+      "palette": "Toxic_Palette.png",
+      "brightness_noise_field": "perlinNoise.png",
+      "contrast_noise_field": "Toxic_Noise_Contrast.png",
+      "contrast_walk_spec": {
+        "min_dx": 1,
+        "max_dx": 2,
+        "min_dy": 0,
+        "max_dy": 1
+      },
+      "brightness_walk_spec": {
+        "min_dx": -1,
+        "max_dx": 1,
+        "min_dy": -1,
+        "max_dy": 1
+      },
+      "brightness_strategy": "value_noise"
     }
   ]
 }

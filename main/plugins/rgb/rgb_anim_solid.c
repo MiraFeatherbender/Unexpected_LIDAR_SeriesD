@@ -5,8 +5,9 @@
 static hsv_color_t solid_hsv = {0, 0, 0};
 static uint8_t solid_brightness = 255;
 
-static void solid_begin(void)
+static void solid_begin(int idx)
 {
+    (void)idx;
     // No hardware calls; just reset state if needed
 }
 

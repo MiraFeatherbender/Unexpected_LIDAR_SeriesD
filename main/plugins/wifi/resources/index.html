@@ -22,7 +22,6 @@
 </head>
 <body>
     <h1>PNG Image Preview</h1>
-
         <div class="img-container">
             <!-- Hidden images for canvas blending -->
             <img id="img-openSimplex2" src="images/openSimplex2.png" alt="openSimplex2 PNG" style="display:none;" crossorigin="anonymous">
@@ -30,6 +29,10 @@
             <div class="col">
                 <!-- Duplicate HSV Preview Canvas (above HSV Curve Editor) -->
                 <div id="hsv-preview-panel" class="panel" style="padding-bottom:0.5em; min-width:750px; max-width:1000px; align-items:center;">
+                    <div style="display:flex; flex-direction:row; align-items:center; justify-content:center; margin-top:8px;">
+                      <input type="checkbox" id="smoothing-checkbox" style="margin-right:6px;">
+                      <label for="smoothing-checkbox" style="color:#ccc; font-size:0.98em; user-select:none; cursor:pointer;">Blur</label>
+                    </div>
                     <div style="display: flex; flex-direction: row; justify-content: center; align-items: flex-start; width:100%;">
                         <canvas id="hsv-preview-canvas" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px; margin: 0 32px;"></canvas>
                         <canvas id="ledSim" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px; margin: 0 32px;"></canvas>
@@ -41,7 +44,6 @@
                         <label>max_dy: <input type="number" id="max_dy" value="1" style="width:40px;"></label>
                         <button id="updateWalk">Update Walk Spec</button>
                     </div>
-                    <div style="color:#aaa; font-size:0.95em; margin-top:0.5em; text-align:center;">HSV Preview</div>
                 </div>
                 <!-- HSV Curve Editor Panel (left of blend-panel) -->
                 <div id="hsv-editor-panel" class="panel" style="min-width:750px; max-width:1000px;">
@@ -158,6 +160,17 @@
         </div>
 
         <script>
+    // Expose smoothing toggle globally
+    window.centerWeightedSmoothing = false;
+    document.addEventListener('DOMContentLoaded', function() {
+      var smoothingCheckbox = document.getElementById('smoothing-checkbox');
+      if (smoothingCheckbox) {
+        smoothingCheckbox.checked = false;
+        smoothingCheckbox.addEventListener('change', function() {
+          window.centerWeightedSmoothing = smoothingCheckbox.checked;
+        });
+      }
+    });
     // --- Blended Canvas Logic with Curve Widget ---
     const imgOpenSimplex = document.getElementById('img-openSimplex2');
     const imgPerlin = document.getElementById('img-perlinNoise');
@@ -235,6 +248,66 @@
           // else leave as is
         }
         dstCtx.putImageData(imgData, 0, 0);
+        // --- LED sim color sampling (after LUT, before cursor) ---
+        let ledSimColor = { r: 0, g: 0, b: 0 };
+        if (typeof x === 'number' && typeof y === 'number') {
+          const w = dst.width, h = dst.height;
+          if (window.centerWeightedSmoothing) {
+            // 3x3 center-weighted smoothing
+            const weights = [
+              [1,2,1],
+              [2,4,2],
+              [1,2,1]
+            ];
+            let sumR = 0, sumG = 0, sumB = 0, sumW = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                let sx = (x + dx + w) % w;
+                let sy = (y + dy + h) % h;
+                let idx = (sy * w + sx) * 4;
+                let wgt = weights[dy+1][dx+1];
+                sumR += imgData.data[idx] * wgt;
+                sumG += imgData.data[idx+1] * wgt;
+                sumB += imgData.data[idx+2] * wgt;
+                sumW += wgt;
+              }
+            }
+            // sumW is 16, so right shift by 4 for integer division
+            ledSimColor.r = sumR >> 4;
+            ledSimColor.g = sumG >> 4;
+            ledSimColor.b = sumB >> 4;
+          } else {
+            // Single pixel sample
+            let sx = ((x % w) + w) % w;
+            let sy = ((y % h) + h) % h;
+            let idx = (sy * w + sx) * 4;
+            ledSimColor.r = imgData.data[idx];
+            ledSimColor.g = imgData.data[idx+1];
+            ledSimColor.b = imgData.data[idx+2];
+          }
+        }
+        window.ledSimColor = ledSimColor;
+        // --- Draw walk pointer: white ring with black outer ring at (x, y) ---
+        if (typeof x === 'number' && typeof y === 'number') {
+          const cx = x;
+          const cy = y;
+          dstCtx.save();
+          dstCtx.beginPath();
+          dstCtx.arc(cx, cy, 9, 0, 2 * Math.PI);
+          dstCtx.lineWidth = 3;
+          dstCtx.strokeStyle = '#000';
+          dstCtx.shadowColor = '#000';
+          dstCtx.shadowBlur = 0;
+          dstCtx.stroke();
+          dstCtx.beginPath();
+          dstCtx.arc(cx, cy, 6, 0, 2 * Math.PI);
+          dstCtx.lineWidth = 2;
+          dstCtx.strokeStyle = '#fff';
+          dstCtx.shadowColor = '#fff';
+          dstCtx.shadowBlur = 0;
+          dstCtx.stroke();
+          dstCtx.restore();
+        }
     }
     // Patch drawBlendedCanvas to also update hsv-preview-canvas with LUT
     const origDrawBlendedCanvas = drawBlendedCanvas;
@@ -660,12 +733,12 @@ function getColorFromCanvas(ctx, x, y) {
 }
 
 function drawLedSim() {
-    const colorCanvas = document.getElementById('hsv-preview-canvas');
     const ledSim = document.getElementById('ledSim');
-    const colorCtx = colorCanvas.getContext('2d');
     const ledCtx = ledSim.getContext('2d');
     ledCtx.clearRect(0, 0, 256, 256);
-    const color = getColorFromCanvas(colorCtx, x, y);
+    // Use the color sampled in updateHSVPreviewWithLUT
+    const c = window.ledSimColor || { r: 0, g: 0, b: 0 };
+    const color = `rgb(${c.r},${c.g},${c.b})`;
     ledCtx.beginPath();
     ledCtx.arc(128, 128, 40, 0, 2 * Math.PI);
     ledCtx.fillStyle = color;
@@ -677,9 +750,10 @@ function drawLedSim() {
 
 function animateLedSim(now) {
     if (!lastFrameTime || now - lastFrameTime >= LED_SIM_FRAME_MS) {
-        stepWalk();
-        drawLedSim();
-        lastFrameTime = now;
+      stepWalk();
+      drawLedSim();
+      updateHSVPreviewWithLUT(); // Update cursor position every frame
+      lastFrameTime = now;
     }
     ledSimAnimFrame = requestAnimationFrame(animateLedSim);
 }
