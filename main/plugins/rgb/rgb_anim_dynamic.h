@@ -6,7 +6,7 @@
 // Initialize and register all JSON-based dynamic animations
 void rgb_anim_dynamic_init(void);
 
-// Optional: reload all animations (e.g., after JSON/PNG update)
+// Optional: reload JSON config at runtime
 bool rgb_anim_dynamic_reload(void);
 
 // Internal: structure for loaded animation config (opaque to users)

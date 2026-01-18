@@ -15,11 +15,41 @@
     .rgb-editor-container .tab-bar { display:flex; gap:8px; margin:8px 0 4px 0; justify-content:center; }
     .rgb-editor-container .tab-btn.active { background:#36393f !important; border-bottom:2px solid #7289da !important; color:#7289da !important; font-weight:bold; }
     .rgb-editor-container .tab-btn { background:#2c2f33; color:#8a929a; border:1px solid #444; border-radius:4px 4px 0 0; padding:6px 18px; font-size:14px; cursor:pointer; outline:none; margin-bottom:-1px; }
+
+    /* Toast container */
+    .rgb-editor-toast-container { position: fixed; top: 16px; right: 16px; z-index: 2000; display:flex; flex-direction:column; gap:8px; }
+    .rgb-editor-toast { background:#111; color:#fff; padding:8px 12px; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.4); opacity:1; transform:translateY(0); transition:opacity .3s, transform .3s; font-size:13px; }
+    .rgb-editor-toast.success { background:#2e7d32; }
+    .rgb-editor-toast.error { background:#c62828; }
+    .rgb-editor-toast.hide { opacity:0; transform:translateY(-6px); }
   `;
   document.head.appendChild(style);
 
+  // --- Toast helpers ---
+  function ensureToastContainer() {
+    if (!window._rgb_toast_container) {
+      const c = document.createElement('div');
+      c.className = 'rgb-editor-toast-container';
+      document.body.appendChild(c);
+      window._rgb_toast_container = c;
+    }
+    return window._rgb_toast_container;
+  }
+
+  function showToast(msg, type = 'info', timeout = 4000) {
+    const container = ensureToastContainer();
+    const el = document.createElement('div');
+    el.className = 'rgb-editor-toast ' + (type || '');
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(() => {
+      el.classList.add('hide');
+      setTimeout(() => el.remove(), 350);
+    }, timeout);
+  }
+
   // --- Widget Constructor ---
-  function createRgbAnimationsEditor(container, options = {}) {
+  function createRgbAnimationsEditor(container, options = {}) { 
     // State
     let animations = options.animations || [];
     let selectedIdx = 0;
@@ -85,7 +115,7 @@
         <div style="text-align:center; margin-bottom:12px;">
           <button class="btn" id="addAnimBtn">Add</button>
           <button class="btn" onclick="window.rgbEditorApi.removeCurrentAnimation()" style="margin-right:4px;">Remove</button>
-          <button class="btn" onclick="window.rgbEditorApi.saveJson()">Save</button>
+          <button class="btn" id="saveJsonBtn" onclick="window.rgbEditorApi.saveJson()">Save</button>
         </div>
         <div id="addAnimModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center;">
           <div style="background:#23272a; color:#e0e0e0; border-radius:10px; box-shadow:0 2px 16px #000a; padding:32px 28px; min-width:320px; max-width:90vw; margin:auto; position:relative; top:15vh;">
@@ -167,12 +197,12 @@
         };
         confirmAddAnimBtn.onclick = function() {
           if (modalAnimIdSelect.options.length === 0) {
-            alert('No available IDs');
+            showToast('No available IDs', 'error');
             return;
           }
           const newId = parseInt(modalAnimIdSelect.value);
           if (isNaN(newId)) {
-            alert('No available IDs');
+            showToast('No available IDs', 'error');
             return;
           }
           // Add new animation with selected ID
@@ -215,21 +245,37 @@
                 render();
               }
             },
-            saveJson: function() {
-              // Upload JSON to server via POST (like uploadPalettesJSON)
+            saveJson: async function() {
+              const saveBtn = document.getElementById('saveJsonBtn');
+              if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
               const jsonStr = JSON.stringify({ animations }, null, 2);
               const blob = new Blob([jsonStr], { type: 'application/json' });
               const fileName = 'rgb_animations.json';
-              var xhttp = new XMLHttpRequest();
-              xhttp.open('POST', '/upload/' + encodeURIComponent(fileName), true);
-              xhttp.send(blob);
-              xhttp.onload = function() {
-                if (xhttp.status === 200) {
-                  alert('Animations JSON uploaded!');
-                } else {
-                  alert('Failed to upload animations JSON.');
+
+              try {
+                const resp = await fetch('/upload/' + encodeURIComponent(fileName), { method: 'POST', body: blob });
+                if (!resp.ok) {
+                  showToast('Failed to upload animations JSON.', 'error');
+                  return;
                 }
-              };
+                showToast('Animations JSON uploaded!', 'success');
+
+                // After successful upload, trigger RGB reload endpoint
+                try {
+                  const r2 = await fetch('/api/rgbReload', { method: 'POST' });
+                  if (r2.ok) {
+                    showToast('RGB reload scheduled', 'success');
+                  } else {
+                    showToast('RGB reload request failed', 'error');
+                  }
+                } catch (e) {
+                  showToast('RGB reload request failed', 'error');
+                }
+              } catch (e) {
+                showToast('Failed to upload animations JSON.', 'error');
+              } finally {
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+              }
             },
       setTab: function(tab) { selectedTab = tab; render(); },
       updateField: function(idx, field, value) { animations[idx][field] = value; render(); },

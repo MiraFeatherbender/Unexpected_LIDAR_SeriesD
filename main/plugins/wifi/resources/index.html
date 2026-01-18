@@ -370,7 +370,7 @@
                 xhttp.send(file);
                 xhttp.onload = function() { location.reload(); };
             } else {
-                alert("Please select a PNG file.");
+                showToast("Please select a PNG file.", 'error');
             }
         }
 
@@ -382,7 +382,7 @@
                 xhttp.send(file);
                 xhttp.onload = function() { location.reload(); };
             } else {
-                alert("Please select an HTML file.");
+                showToast("Please select an HTML file.", 'error');
             }
         }
         // Initialize HSV Curve Editor
@@ -548,11 +548,11 @@ confirmBtn.addEventListener('click', function() {
   if (dialogDropdown.value === '__new__') {
     name = newNameInput.value.trim();
     if (!name) {
-      alert('Please enter a name.');
+      showToast('Please enter a name.', 'error');
       return;
     }
     if (noiseCurvesData[name]) {
-      alert('Name already exists.');
+      showToast('Name already exists.', 'error');
       return;
     }
     // Add new option to dropdowns
@@ -589,7 +589,7 @@ confirmBtn.addEventListener('click', function() {
         if (canvas) {
           canvas.toBlob(function(pngBlob) {
             if (!pngBlob) {
-              alert('Failed to create PNG blob from canvas.');
+              showToast('Failed to create PNG for preview.', 'error');
               return;
             }
             const imgXhr = new XMLHttpRequest();
@@ -600,23 +600,23 @@ confirmBtn.addEventListener('click', function() {
             imgXhr.send(pngBlob);
             imgXhr.onload = function() {
               if (imgXhr.status === 200) {
-                alert('Curve/blend and PNG saved for ' + name + '!');
+                showToast('Curve/blend and PNG saved for ' + name + '!', 'success');
                 paletteDropdown.value = name;
                 paletteDropdown.dispatchEvent(new Event('change'));
                 saveDialog.style.display = 'none';
               } else {
-                alert('Curve/blend saved, but failed to save PNG for ' + name);
+                showToast('Curve saved, but PNG upload failed for ' + name, 'error');
               }
             };
           }, 'image/png');
         } else {
-          alert('Curve/blend saved, but blend-canvas not found.');
+          showToast('Curve saved, but preview canvas not found.', 'error');
         }
       } catch (e) {
-        alert('Curve/blend saved, but error saving PNG: ' + e);
+        showToast('Curve saved, PNG save error: ' + (e && e.message ? e.message : e), 'error');
       }
     } else {
-      alert('Failed to save curve and blend for ' + name);
+      showToast('Failed to save curve for ' + name, 'error');
     }
   };
 });
@@ -687,14 +687,14 @@ function openBatteryLevelsModal() {
         xhttp.open('POST', '/upload/Battery_Levels.json', true);
         xhttp.onload = function() {
           if (xhttp.status === 200) {
-            alert('Battery_Levels.json uploaded successfully!');
+            showToast('Battery_Levels.json uploaded successfully!', 'success');
             closeBatteryLevelsModal();
           } else {
-            alert('Failed to upload Battery_Levels.json');
+            showToast('Failed to upload Battery_Levels.json', 'error');
           }
         };
         xhttp.onerror = function() {
-          alert('Error uploading Battery_Levels.json');
+          showToast('Error uploading Battery_Levels.json', 'error');
         };
         xhttp.send(blob);
       },

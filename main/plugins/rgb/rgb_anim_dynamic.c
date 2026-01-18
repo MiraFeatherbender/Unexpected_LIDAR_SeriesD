@@ -214,29 +214,18 @@ static void Load_PNG_Task(void *pvParameters) {
                 int bytes3 = read_image_file(s_configs[idx].color_palette_png_path, &anim_buffers.palette_raw_rgb, &anim_buffers.palette_raw_size, 3);
 
                 // Apply palette to contrast grayscale to produce RGB noise field
-                // const uint8_t *gray = anim_buffers.contrast_gray_init;
-                // rgb_color_t *rgb = anim_buffers.contrast_rgb_colored;
-                // const uint8_t *pal = anim_buffers.palette_raw_rgb;
-                // 
-                // for (int i = 0; i < 256 * 256; ++i) {
-                //     uint8_t idx = *gray++;
-                //     const uint8_t *p = pal + (idx * 3);
-                //     rgb->r = p[0];
-                //     rgb->g = p[1];
-                //     rgb->b = p[2];
-                //     ++rgb;
-                // }
-
                 const uint8_t *gray = anim_buffers.contrast_gray_init;
                 rgb_color_t *rgb = anim_buffers.contrast_rgb_colored;
                 const uint8_t *pal = anim_buffers.palette_raw_rgb;
-
+                
                 for (int i = 0; i < 256 * 256; ++i) {
-                    uint16_t idx = (uint16_t)gray[i] << 1; // 0-255 -> 0-510 (even indices)
-                    const uint8_t *p = &pal[idx * 3];
-                    rgb[i].r = p[0];
-                    rgb[i].g = p[1];
-                    rgb[i].b = p[2];
+                    uint16_t idx = *gray++;
+                    idx = idx << 1; // 0-255 -> 0-510 (even indices)
+                    const uint8_t *p = pal + (idx * 3);
+                    rgb->r = p[0];
+                    rgb->g = p[1];
+                    rgb->b = p[2];
+                    ++rgb;
                 }
 
                 // Blur contrast RGB channels and brightness field
@@ -333,52 +322,8 @@ void alloc_png_bufs(void) {
 }
 
 void rgb_anim_dynamic_init(void) {
-    int read_bytes = io_fatfs_read_file(RGB_ANIM_JSON_PATH, buffer, sizeof(buffer)-1);
-    if (read_bytes <= 0) {
-        // Failed to read JSON file
-        return;
-    }
-    buffer[read_bytes] = '\0'; // Null-terminate for cJSON
-
-    cJSON *root = cJSON_Parse((char *)buffer);
-    if (!root) {
-        // JSON parsing error
-        return;
-    }
-
-    cJSON *animations = cJSON_GetObjectItem(root, "animations");
-    int count = cJSON_GetArraySize(animations);
-    s_config_count = count > MAX_DYNAMIC_ANIMS ? MAX_DYNAMIC_ANIMS : count;
-    for (int i = 0; i < s_config_count; i++) {
-        cJSON *anim = cJSON_GetArrayItem(animations, i);
-        s_configs[i].id = GET_INT(anim, "id", 0);
-        GET_STR(anim, "palette", s_configs[i].color_palette_png_path);
-        GET_STR(anim, "contrast_noise_field", s_configs[i].contrast_noise_png_path);
-        GET_STR(anim, "brightness_noise_field", s_configs[i].brightness_noise_png_path);
-        s_configs[i].contrast_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "contrast_walk_spec"));
-        s_configs[i].brightness_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "brightness_walk_spec"));
-    }
-
-    cJSON_Delete(root);
-
-    // Log loaded configs
-    for (int i = 0; i < s_config_count; i++) {
-        ESP_LOGI("rgb_anim_dynamic", "Config %d: id=%d, palette=%s, contrast_noise=%s, brightness_noise=%s", i,
-            s_configs[i].id,
-            s_configs[i].color_palette_png_path,
-            s_configs[i].contrast_noise_png_path,
-            s_configs[i].brightness_noise_png_path);
-        ESP_LOGI("rgb_anim_dynamic", "  contrast_walk: min_dx=%d, max_dx=%d, min_dy=%d, max_dy=%d",
-            s_configs[i].contrast_walk_spec.min_dx,
-            s_configs[i].contrast_walk_spec.max_dx,
-            s_configs[i].contrast_walk_spec.min_dy,
-            s_configs[i].contrast_walk_spec.max_dy);
-        ESP_LOGI("rgb_anim_dynamic", "  brightness_walk: min_dx=%d, max_dx=%d, min_dy=%d, max_dy=%d",
-            s_configs[i].brightness_walk_spec.min_dx,
-            s_configs[i].brightness_walk_spec.max_dx,
-            s_configs[i].brightness_walk_spec.min_dy,
-            s_configs[i].brightness_walk_spec.max_dy);
-    }
+    // Load and parse JSON config file
+    rgb_anim_dynamic_reload();
 
     // For each loaded animation, register with io_rgb
     for (int i = 0; i < s_config_count; ++i) {
@@ -397,7 +342,33 @@ void rgb_anim_dynamic_init(void) {
 }
 
 bool rgb_anim_dynamic_reload(void) {
-    // TODO: Re-parse JSON and reload PNGs
+    int read_bytes = io_fatfs_read_file(RGB_ANIM_JSON_PATH, buffer, sizeof(buffer)-1);
+    if (read_bytes <= 0) {
+        // Failed to read JSON file
+        return false;
+    }
+    buffer[read_bytes] = '\0'; // Null-terminate for cJSON
+
+    cJSON *root = cJSON_Parse((char *)buffer);
+    if (!root) {
+        // JSON parsing error
+        return false;
+    }
+
+    cJSON *animations = cJSON_GetObjectItem(root, "animations");
+    int count = cJSON_GetArraySize(animations);
+    s_config_count = count > MAX_DYNAMIC_ANIMS ? MAX_DYNAMIC_ANIMS : count;
+    for (int i = 0; i < s_config_count; i++) {
+        cJSON *anim = cJSON_GetArrayItem(animations, i);
+        s_configs[i].id = GET_INT(anim, "id", 0);
+        GET_STR(anim, "palette", s_configs[i].color_palette_png_path);
+        GET_STR(anim, "contrast_noise_field", s_configs[i].contrast_noise_png_path);
+        GET_STR(anim, "brightness_noise_field", s_configs[i].brightness_noise_png_path);
+        s_configs[i].contrast_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "contrast_walk_spec"));
+        s_configs[i].brightness_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "brightness_walk_spec"));
+    }
+
+    cJSON_Delete(root);
     return true;
 }
 

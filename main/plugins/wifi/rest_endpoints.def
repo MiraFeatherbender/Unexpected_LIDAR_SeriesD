@@ -1,4 +1,5 @@
 X_REST_ENDPOINT("/api/rgbJSON", HTTP_GET, json_get_handler, TARGET_RGB)
 X_REST_ENDPOINT("/api/rgb", HTTP_GET, rgb_handler, TARGET_RGB)
 X_REST_ENDPOINT("/api/rgb", HTTP_POST, rgb_handler, TARGET_RGB)
+X_REST_ENDPOINT("/api/rgbReload", HTTP_POST, rgb_reload_handler, TARGET_RGB)
 X_REST_ENDPOINT("/api/images", HTTP_GET, images_list_handler, NULL)

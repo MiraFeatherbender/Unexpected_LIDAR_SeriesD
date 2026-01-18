@@ -327,7 +327,7 @@ const HSVEditor = (function() {
               name = newNameInput.value.trim();
               if (!name) return;
               if (palettePresets[name]) {
-                alert('Preset name already exists.');
+                showToast('Preset name already exists.', 'error');
                 return;
               }
               paletteNames.push(name);

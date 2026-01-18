@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include "rgb_anim_dynamic.h"
 
 #define RGB_CMD_QUEUE_LEN 32
 #define RGB_TASK_STACK_SIZE 4096
@@ -22,6 +23,7 @@ typedef enum {
     RGB_PLUGIN_TYPE_HSV = 0,
     RGB_PLUGIN_TYPE_RGB = 1,
 } rgb_plugin_type_t;
+
 
 typedef struct {
     rgb_plugin_type_t type;
@@ -310,6 +312,18 @@ static void io_rgb_task(void *arg)
                     }
                     else {
                         ESP_LOGI("io_rgb", "SOURCE_REST: COMMAND path entered, context=NULL, msg.data[0]=%d, msg.data[1]=%d, msg.data[2]=%d, msg.data[3]=%d, msg.data[4]=%d, msg_len=%d", msg.data[0], msg.data[1], msg.data[2], msg.data[3], msg.data[4], msg.message_len);
+                        // Extended REST command: optional command byte at data[5]
+                        if (msg.message_len >= 6) {
+                            uint8_t cmd = msg.data[5];
+                            switch (cmd) {
+                                case RGB_CMD_RELOAD:
+                                    ESP_LOGI("io_rgb", "RGB_CMD_RELOAD command received (REST)");
+                                    rgb_anim_dynamic_reload();
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
                         // REST command to change RGB
                         if(msg.data[0] == RGB_PLUGIN_OFF) {
                             rest_off_until = xTaskGetTickCount() + pdMS_TO_TICKS(5000); // 5 seconds off

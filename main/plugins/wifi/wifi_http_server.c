@@ -1,6 +1,7 @@
 #include "wifi_http_server.h"
 #include "io_fatfs.h"
 #include "dispatcher.h"
+#include "io_rgb.h"
 #include "rest_context.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -289,6 +290,28 @@ static esp_err_t rgb_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t rgb_reload_handler(httpd_req_t *req) {
+    // Optional: consume any posted body (we don't need it)
+    if (req->content_len > 0) {
+        char tmp[64];
+        int r = httpd_req_recv(req, tmp, min(req->content_len, sizeof(tmp)-1));
+        (void)r;
+    }
+
+    uint8_t data[6] = {0};
+    data[5] = RGB_CMD_RELOAD;
+
+    esp_err_t err = dispatch_from_rest(req, (void*)(intptr_t)TARGET_RGB, data, sizeof(data));
+    if (err != ESP_OK) {
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Dispatch failed");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"scheduled\"}");
+    return ESP_OK;
+}
+
 static esp_err_t images_list_handler(httpd_req_t *req) {
     char file_list[32][64]; // Up to 32 files, 63 chars each
     int count = io_fatfs_list_files("/data/images", file_list, 32);
@@ -360,6 +383,12 @@ void wifi_http_server_start(void)
     config.stack_size = 8192; // or 4096, depending on your needs
     config.server_port = 80;
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
+
+    // Ensure the httpd instance has enough slots for all routes we plan to register
+    size_t route_count = sizeof(http_server_routes) / sizeof(http_server_routes[0]);
+    config.max_uri_handlers = (int)route_count;
+    ESP_LOGI(TAG, "Setting max_uri_handlers = %d", (int)route_count);
+
     ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
         register_http_server_routes(server);

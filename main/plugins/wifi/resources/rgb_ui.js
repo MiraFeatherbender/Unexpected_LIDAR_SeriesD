@@ -103,7 +103,7 @@ window.addEventListener('DOMContentLoaded', function() {
             console.log('RGB settings applied:', result);
         })
         .catch(err => {
-            alert('Failed to apply RGB settings.');
+            showToast('Failed to apply RGB settings.', 'error');
             console.error(err);
         });
     };
