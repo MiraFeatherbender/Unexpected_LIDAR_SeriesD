@@ -16,6 +16,6 @@ void noise_walk_step(uint8_t *x, uint8_t *y, const noise_walk_spec_t *spec) {
     int8_t dy = (spec->min_dy == spec->max_dy)
         ? spec->min_dy
         : (int8_t)randrange(spec->min_dy, spec->max_dy);
-    *x = (uint8_t)(*x + dx);
-    *y = (uint8_t)(*y + dy);
+    *x = (uint8_t)((*x + dx + 256) % 256);
+    *y = (uint8_t)((*y + dy + 256) % 256);
 }

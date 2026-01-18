@@ -214,17 +214,29 @@ static void Load_PNG_Task(void *pvParameters) {
                 int bytes3 = read_image_file(s_configs[idx].color_palette_png_path, &anim_buffers.palette_raw_rgb, &anim_buffers.palette_raw_size, 3);
 
                 // Apply palette to contrast grayscale to produce RGB noise field
+                // const uint8_t *gray = anim_buffers.contrast_gray_init;
+                // rgb_color_t *rgb = anim_buffers.contrast_rgb_colored;
+                // const uint8_t *pal = anim_buffers.palette_raw_rgb;
+                // 
+                // for (int i = 0; i < 256 * 256; ++i) {
+                //     uint8_t idx = *gray++;
+                //     const uint8_t *p = pal + (idx * 3);
+                //     rgb->r = p[0];
+                //     rgb->g = p[1];
+                //     rgb->b = p[2];
+                //     ++rgb;
+                // }
+
                 const uint8_t *gray = anim_buffers.contrast_gray_init;
                 rgb_color_t *rgb = anim_buffers.contrast_rgb_colored;
                 const uint8_t *pal = anim_buffers.palette_raw_rgb;
-                
+
                 for (int i = 0; i < 256 * 256; ++i) {
-                    uint8_t idx = *gray++;
-                    const uint8_t *p = pal + (idx * 3);
-                    rgb->r = p[0];
-                    rgb->g = p[1];
-                    rgb->b = p[2];
-                    ++rgb;
+                    uint16_t idx = (uint16_t)gray[i] << 1; // 0-255 -> 0-510 (even indices)
+                    const uint8_t *p = &pal[idx * 3];
+                    rgb[i].r = p[0];
+                    rgb[i].g = p[1];
+                    rgb[i].b = p[2];
                 }
 
                 // Blur contrast RGB channels and brightness field
@@ -407,10 +419,10 @@ static void dynamic_begin(int idx) {
     // Load walk specs from config and reset walk positions
     s_contrast_walk.spec = s_configs[s_active_idx].contrast_walk_spec;
     s_brightness_walk.spec = s_configs[s_active_idx].brightness_walk_spec;
-    s_contrast_walk.x = 0;
-    s_contrast_walk.y = 0;
-    s_brightness_walk.x = 0;
-    s_brightness_walk.y = 0;
+    s_contrast_walk.x = 128;
+    s_contrast_walk.y = 128;
+    s_brightness_walk.x = 128;
+    s_brightness_walk.y = 128;
 
     // Trigger the PNG load task with the selected idx
     s_load_png_idx = s_active_idx;
@@ -433,6 +445,7 @@ static void dynamic_step(rgb_color_t *out_rgb) {
     uint32_t brightness_idx = ((uint32_t)s_brightness_walk.y << 8) | s_brightness_walk.x;
     rgb_color_t contrast = anim_buffers.contrast_rgb_active[contrast_idx];
     uint8_t noise = anim_buffers.brightness_gray_active[brightness_idx];
+    // uint8_t brightness = 128;
     uint8_t brightness = brightness_value_noise_rgb(contrast, noise, s_user_brightness);
 
     io_rgb_set_anim_brightness(brightness);
