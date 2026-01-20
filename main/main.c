@@ -26,11 +26,11 @@ void app_main(void)
 #endif
     dispatcher_init();
     io_usb_cdc_msc_init();
+    rgb_anim_init_all();
     io_rgb_init();
     io_gpio_init();
     io_lidar_init();
     lidar_coordinator_init();
-    rgb_anim_init_all();
     io_battery_init();
 
     // Start Wi-Fi AP

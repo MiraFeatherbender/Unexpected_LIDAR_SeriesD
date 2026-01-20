@@ -189,15 +189,15 @@ static void io_rgb_dispatcher_handler(const dispatcher_msg_t *msg)
 
 void io_rgb_init(void)
 {
+    // Initialize RGB hardware
+    ums3_set_pixel_brightness(current_brightness);
+    ums3_set_pixel_color(0, 0, 0);    
+    
     // Create command queue
     rgb_cmd_queue = xQueueCreate(RGB_CMD_QUEUE_LEN, sizeof(dispatcher_msg_t));
 
     // Register with dispatcher
     dispatcher_register_handler(TARGET_RGB, io_rgb_dispatcher_handler);
-
-    // Initialize RGB hardware
-    ums3_set_pixel_brightness(current_brightness);
-    ums3_set_pixel_color(0, 0, 0);
 
     // Start RGB task
     xTaskCreate(io_rgb_task,
@@ -311,7 +311,6 @@ static void io_rgb_task(void *arg)
                         xSemaphoreGive(req->sem);
                     }
                     else {
-                        ESP_LOGI("io_rgb", "SOURCE_REST: COMMAND path entered, context=NULL, msg.data[0]=%d, msg.data[1]=%d, msg.data[2]=%d, msg.data[3]=%d, msg.data[4]=%d, msg_len=%d", msg.data[0], msg.data[1], msg.data[2], msg.data[3], msg.data[4], msg.message_len);
                         // Extended REST command: optional command byte at data[5]
                         if (msg.message_len >= 6) {
                             uint8_t cmd = msg.data[5];
