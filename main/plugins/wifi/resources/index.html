@@ -2,14 +2,113 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>PNG Image Preview</title>
+    <title>AnkleBiter Dashboard</title>
     <style>
         body { font-family: Arial, sans-serif; background: #222; color: #eee; text-align: center; }
-        .img-container { display: flex; flex-direction: row; justify-content: center; align-items: flex-start; gap: 2em; margin-top: 2em; }
-        .col { display: flex; flex-direction: column; gap: 2em; }
-        .panel { background:#181818; border-radius:12px; padding:1.5em; min-width:420px; max-width:600px; display:flex; flex-direction:column; align-items:center; }
-        img { border: 2px solid #444; background: #111; max-width: 320px; max-height: 320px; }
+        :root {
+            --grid-col-left: 360px;
+            --grid-col-center-min: 800px;
+            --grid-col-right: 360px;
+            --grid-row-gap: 6px;
+            --grid-col-gap: 2em;
+            --grid-margin: auto;
+            --grid-max-width: 1600px;
+            --grid-row-top-height: 370px;
+
+            --col-gap-vertical: 0.2em;
+
+            --panel-bg: #181818;
+            --panel-radius: 12px;
+            --panel-padding: 16px;
+            --panel-min-width: 340px;
+            --panel-max-width: 360px;
+
+            --hsv-preview-min: 720px;
+            --hsv-preview-max: 800px;
+            --blend-min: 340px;
+            --blend-max: 360px;
+            --editors-max-width: 360px;
+            --rgb-min: 340px;
+            --rgb-max: 360px;
+
+            --canvas-small-size: 220px;
+
+            --btn-bg: #2a2a2a;
+            --btn-bg-hover: #343434;
+            --btn-color: #fff;
+            --btn-padding: 4px 16px;
+            --btn-radius: 4px;
+            --btn-font-size: 1.1em;
+            --btn-border: none;
+            --btn-large-padding: 0.7em 2em;
+            --btn-compact-padding: 6px 10px;
+            --btn-wide-padding: 6px 24px;
+            --btn-secondary-bg: #444;
+        }
+        /* Grid layout for the main panels: left (large), middle (blend), right (editors / rgb) */
+        .img-container {
+            display: grid;
+            grid-template-columns: var(--grid-col-left) minmax(var(--grid-col-center-min) , 1fr) var(--grid-col-right);
+            grid-template-rows: auto auto;
+            /* grid-auto-rows: min-content; */
+            grid-template-areas:
+                "blend hsv-preview editors"
+                "blend hsv-editor rgb";
+            gap: var(--grid-row-gap) var(--grid-col-gap);
+            margin: var(--grid-margin);
+            max-width: var(--grid-max-width);
+            justify-items: center;
+            align-items: start;
+        }
+        /* Keep column containers as vertical stacks where used */
+        .col { display: flex; flex-direction: column; gap: var(--col-gap-vertical); width:100%; }
+
+        .panel { background:var(--panel-bg); border-radius:var(--panel-radius); padding:var(--panel-padding); min-width:var(--panel-min-width); max-width:var(--panel-max-width); display:flex; flex-direction:column; align-items:center; }
+
+        /* Map panels to grid areas so positions can be changed via CSS only */
+        #hsv-preview-panel { grid-area: hsv-preview; min-width:var(--hsv-preview-min); max-width:var(--hsv-preview-max); justify-self:center; }
+        #hsv-editor-panel { grid-area: hsv-editor; grid-row: 2 / span 1; min-width:var(--hsv-preview-min); max-width:var(--hsv-preview-max); justify-self:center;}
+        #blend-panel { grid-area: blend; grid-row: 1 / span 2; align-self: stretch; min-width:var(--blend-min); max-width:var(--blend-max); justify-self:right;}
+        #editors-panel { grid-area: editors; width:auto; max-width:var(--rgb-max); justify-self:center; }
+        #rgb-ui-panel { grid-area: rgb; min-width:var(--rgb-min); max-width:var(--rgb-max); justify-self:center; }
+
+        /* Panel modifier classes (referencing existing CSS variables; values unchanged) */
+        .panel--wide { min-width: var(--hsv-preview-min); max-width: var(--hsv-preview-max); justify-self: center; }
+        .panel--hsv-preview { padding-bottom: 0.5em; align-items: center; }
+        .panel--small { min-width: var(--blend-min); max-width: var(--blend-max); }
+        .panel--editors { max-width: var(--rgb-max); margin: 0; background: var(--panel-bg); border-radius: var(--panel-radius); width: auto; }
+        .panel--rgb { min-width: var(--rgb-min); max-width: var(--rgb-max); }
+
+        .btn { font-size: var(--btn-font-size); padding: var(--btn-padding); background: var(--btn-bg); color: var(--btn-color); border: var(--btn-border); border-radius: var(--btn-radius); cursor: pointer; }
+        .btn:hover { background: var(--btn-bg-hover); }
+        .btn--large { padding: var(--btn-large-padding); border-radius: 6px; }
+        .btn--compact { padding: var(--btn-compact-padding); border-radius: 6px; }
+        .btn--wide { padding: var(--btn-wide-padding); border-radius: 6px; }
+        .btn--secondary { background: var(--btn-secondary-bg); }
+        .btn--channel { padding: 6px 18px; border-radius: 4px; font-weight: bold; color: #fff; }
+        .btn--hue { background: #e74c3c; }
+        .btn--sat { background: #3498db; }
+        .btn--val { background: #2ecc40; }
+        .btn--muted { opacity: 0.5; }
+
+        img { border: 2px solid #444; background: #111; max-width: 320px; max-height: fit-content; }
         h1 { margin-top: 1em; }
+
+        /* Responsive: stack panels on small viewports */
+        @media (max-width: 1100px) {
+            .img-container {
+                grid-template-columns: 1fr;
+                grid-template-areas:
+                    "hsv-preview"
+                    "hsv-editor"
+                    "blend"
+                    "editors"
+                    "rgb";
+            }
+            .panel { min-width: 280px; max-width: 100%; width: auto !important; }
+            /* Reduce canvas footprints on small screens */
+            #hsv-preview-canvas, #ledSim, #blend-canvas { width: var(--canvas-small-size) !important; height: var(--canvas-small-size) !important; }
+        }
     </style>
     <!-- All JS libraries loaded in head, before any inline scripts -->
     <script src="iro.min.js"></script>
@@ -21,14 +120,12 @@
     <script src="rgbAnimationsEditor.js"></script>
 </head>
 <body>
-    <h1>PNG Image Preview</h1>
+    <h1>AnkleBiter Dashboard</h1>
         <div class="img-container">
             <!-- Hidden images for canvas blending -->
             <img id="img-openSimplex2" src="images/openSimplex2.png" alt="openSimplex2 PNG" style="display:none;" crossorigin="anonymous">
             <img id="img-perlinNoise" src="images/perlinNoise.png" alt="perlinNoise PNG" style="display:none;" crossorigin="anonymous">
-            <div class="col">
-                <!-- Duplicate HSV Preview Canvas (above HSV Curve Editor) -->
-                <div id="hsv-preview-panel" class="panel" style="padding-bottom:0.5em; min-width:750px; max-width:1000px; align-items:center;">
+            <div id="hsv-preview-panel" class="panel panel--wide panel--hsv-preview">
                     <div style="display:flex; flex-direction:row; align-items:center; justify-content:center; margin-top:8px;">
                       <input type="checkbox" id="smoothing-checkbox" style="margin-right:6px;">
                       <label for="smoothing-checkbox" style="color:#ccc; font-size:0.98em; user-select:none; cursor:pointer;">Blur</label>
@@ -46,13 +143,10 @@
                     </div>
                 </div>
                 <!-- HSV Curve Editor Panel (left of blend-panel) -->
-                <div id="hsv-editor-panel" class="panel" style="min-width:750px; max-width:1000px;">
+                <div id="hsv-editor-panel" class="panel panel--wide">
                     <!-- HSV Curve Editor widget will be rendered here -->
-                </div>
-            </div>
-            <div class="col">
-                <!-- Blended Canvas Panel -->
-                <div id="blend-panel" class="panel" style="min-width:340px; max-width:360px;">
+                </div>   
+            <div id="blend-panel" class="panel panel--small">
                     <h2 style="margin-bottom:0.5em; color:#eee; font-size:1.1em;">Blended Noise (Canvas)</h2>
                     <canvas id="blend-canvas" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px;"></canvas>
                     <div style="margin-top:1em; width:100%;">
@@ -66,15 +160,46 @@
                         <select id="noise-palette-dropdown" style="font-size:1em; padding:4px 12px; border-radius:4px; margin-right:8px;">
                             <!-- Options will be populated by JavaScript -->
                         </select>
-                        <button id="save-curve-btn" style="font-size:1.1em; padding:4px 16px; background:#2a2a2a; color:#fff; border:none; border-radius:4px; cursor:pointer;">Save Curve</button>
+                        <button id="save-curve-btn" class="btn">Save Curve</button>
                     </div>
                     <!-- Curve widget will be injected here -->
                     <div id="curve-widget-container" style="margin-top:16px;"></div>
+                </div> 
+            <div id="editors-panel" class="panel panel--editors" role="region" aria-label="Upload and editors panel">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:0.75em;">
+                    <div style="display:flex; gap:0.75em; flex-direction:column; align-items:center; width:100%;">
+                        <button id="battery-levels-modal-btn" class="btn btn--large">Edit Battery Levels</button>
+                        <button id="editAnimPluginBtn" class="btn btn--large">Edit Animation Parameters</button>
+                    </div>
+                    <!-- Subpanel: Upload -->
+                    <div style="width:100%; display:flex; justify-content:center;">
+                        <div style="padding:0; background:transparent; border-radius:0; width:auto; max-width:var(--rgb-max); text-align:center;">
+                            <strong style="display:block; margin-bottom:0.4em;">Upload files to a target directory:</strong>
+                            <div style="margin-top:0.5em; display:flex; gap:0.5em; justify-content:center; align-items:center;">
+                                <label style="color:#ccc;">
+                                    <select id="root-upload-dir-dropdown" aria-label="Target directory" style="padding:4px 8px; border-radius:4px; background:#333; color:#eee; border:1px solid #555; min-width:160px;">
+                                        <option value="">/ (root)</option>
+                                    </select>
+                                </label>
+                                <button id="refresh-dirs-btn" class="btn btn--compact" aria-label="Refresh directories" title="Refresh directories">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                      <path d="M23 4v6h-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                      <path d="M1 20v-6h6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                      <path d="M3.51 9a9 9 0 0114.13-3.36L23 10" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                      <path d="M20.49 15a9 9 0 01-14.13 3.36L1 14" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div id="root-upload-drop" style="margin:1em auto; padding:0.75em; border:2px dashed #555; background:#333; cursor:pointer; text-align:center; width:260px; height:96px; display:flex; align-items:center; justify-content:center; border-radius:8px; white-space:normal; word-break:break-word; font-size:0.95em;">
+                                <div style="line-height:1.2em;">Drag and drop files here<br>to upload to the selected directory</div>
+                            </div>
+                            <input type="file" id="root-upload-input" multiple style="display:none;">
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="col">
                 <!-- New RGB UI Panel -->
-                <div id="rgb-ui-panel" class="panel" style="min-width:340px; max-width:360px;">
+                <div id="rgb-ui-panel" class="panel panel--rgb">
                     <div id="color-preview" style="width:48px; height:48px; border-radius:50%; border:1px solid #ccc; margin-bottom:1em;"></div>
                     <div id="picker-container"></div>
                     <div id="hsv-values" style="margin-bottom:1em;"></div>
@@ -87,46 +212,14 @@
                         <label for="animation-dropdown" style="color:#eee;">Animation:</label>
                         <select id="animation-dropdown" style="margin-left:0.5em; min-width:120px;"></select>
                     </div>
-                    <button id="apply-btn" style="margin-top:1.5em; padding:0.5em 2em; font-size:1.1em; background:#2a2a2a; color:#fff; border:none; border-radius:6px; cursor:pointer;">Apply</button>
+                    <button id="apply-btn" class="btn btn--large" style="margin-top:1.5em;">Apply</button>
                 </div>
-                <!-- Battery Levels Editor Modal Button -->
-                <button id="battery-levels-modal-btn" style="margin-top:2em; padding:0.7em 2em; background:#333; color:#eee; border:none; border-radius:6px; font-size:1em; cursor:pointer;">Edit Battery Levels</button>
-                <!-- New button to open Animation Parameters Editor -->
-                <button id="editAnimPluginBtn" style="margin-top:1em; padding:0.7em 2em; background:#333; color:#eee; border:none; border-radius:6px; font-size:1em; cursor:pointer;">Edit Animation Parameters</button>
-            </div>
-        </div>
+             
 
 
-        <hr style="margin:2em 0;">
-        <div>
-            <label for="update-index">Update Webpage (index.html):</label>
-            <input type="file" id="update-index" accept=".html">
-            <button onclick="uploadIndex()">Upload</button>
-        </div>
+        <!-- Update Webpage and Noise Image upload UI removed; functionality moved into the editors panel above -->
 
-        <!-- Image upload section for noise PNGs -->
-        <div style="margin:2em 0; padding:1em; border:1px dashed #888; background:#222; max-width:400px; margin-left:auto; margin-right:auto;">
-            <strong>Upload noise images:</strong>
-            <div style="margin:1em 0; display:flex; flex-direction:column; gap:1em;">
-                <label style="color:#ccc;">openSimplex2.png:
-                    <input type="file" id="upload-openSimplex2" accept="image/png" style="margin-left:1em;">
-                    <button onclick="uploadImage('openSimplex2')">Upload</button>
-                </label>
-                <label style="color:#ccc;">perlinNoise.png:
-                    <input type="file" id="upload-perlinNoise" accept="image/png" style="margin-left:1em;">
-                    <button onclick="uploadImage('perlinNoise')">Upload</button>
-                </label>
-            </div>
-        </div>
-
-        <!-- Generic root file upload section -->
-        <div style="margin:2em 0; padding:1em; border:1px dashed #888; background:#222; max-width:400px; margin-left:auto; margin-right:auto;">
-            <strong>Upload root files here:</strong>
-            <div id="root-upload-drop" style="margin:1em 0; padding:1em; border:2px dashed #555; background:#333; cursor:pointer;">
-                Drag and drop files here to upload to root directory
-            </div>
-            <input type="file" id="root-upload-input" multiple style="display:none;">
-        </div>
+        <!-- Upload panel moved into the editors panel above for better grouping -->
 
         <!-- --- Modal Save Dialog for Curve/Blend --- -->
         <!-- Create dialog elements -->
@@ -138,8 +231,8 @@
                 </select>
                 <input type="text" id="new-palette-name" placeholder="New palette name" style="display:none; margin-top:1em; padding:4px 12px; border-radius:4px; width:100%;">
                 <div style="margin-top:2em; display:flex; flex-direction:row; justify-content:center; gap:2em;">
-                    <button id="confirm-save-btn" style="padding:6px 24px; background:#2a2a2a; color:#fff; border:none; border-radius:6px; cursor:pointer;">Confirm</button>
-                    <button id="cancel-save-btn" style="padding:6px 24px; background:#444; color:#fff; border:none; border-radius:6px; cursor:pointer;">Cancel</button>
+                    <button id="confirm-save-btn" class="btn btn--wide">Confirm</button>
+                    <button id="cancel-save-btn" class="btn btn--wide btn--secondary">Cancel</button>
                 </div>
             </div>
         </div>
@@ -154,7 +247,7 @@
         <!-- Modal for RGB Animations Editor -->
         <div id="rgbEditorModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:1000; align-items:center; justify-content:center;">
           <div style="background:#23272a; color:#e0e0e0; border-radius:10px; box-shadow:0 2px 16px #000a; padding:32px 28px; min-width:320px; max-width:90vw; margin:auto; position:relative; top:10vh;">
-            <button onclick="document.getElementById('rgbEditorModal').style.display='none'" style="position:absolute; top:8px; right:12px; background:#444; color:#eee; border:none; border-radius:4px; padding:4px 10px; cursor:pointer;">Close</button>
+            <button onclick="document.getElementById('rgbEditorModal').style.display='none'" class="btn btn--secondary" style="position:absolute; top:8px; right:12px; padding:4px 10px;">Close</button>
             <div id="rgbEditorContainer"></div>
           </div>
         </div>
@@ -329,6 +422,9 @@
         // Root file upload logic
         var rootDrop = document.getElementById('root-upload-drop');
         var rootInput = document.getElementById('root-upload-input');
+        var ROOT_DROP_DEFAULT_HTML = '<div style="line-height:1.2em;">Drag and drop files here<br>to upload to the selected directory</div>';
+        // Ensure initial markup is the canonical default (useful if JS resets UI)
+        rootDrop.innerHTML = ROOT_DROP_DEFAULT_HTML;
         rootDrop.addEventListener('click', function() { rootInput.click(); });
         rootDrop.addEventListener('dragover', function(e) { e.preventDefault(); rootDrop.style.background = '#444'; });
         rootDrop.addEventListener('dragleave', function(e) { e.preventDefault(); rootDrop.style.background = '#333'; });
@@ -340,23 +436,60 @@
         rootInput.addEventListener('change', function(e) {
             handleRootFiles(e.target.files);
         });
+        function fetchDirectories() {
+            fetch('/api/directories')
+              .then(r => r.json())
+              .then(list => {
+                var dd = document.getElementById('root-upload-dir-dropdown');
+                if (!dd) return;
+                dd.innerHTML = '';
+                var opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '/ (root)';
+                dd.appendChild(opt);
+                list.forEach(function(d) {
+                  var o = document.createElement('option');
+                  o.value = d;
+                  o.textContent = d;
+                  dd.appendChild(o);
+                });
+              })
+              .catch(() => {
+                console.warn('Failed to fetch directories');
+              });
+        }
+
         function handleRootFiles(files) {
             if (!files || files.length === 0) return;
+            var dd = document.getElementById('root-upload-dir-dropdown');
+            var selected = dd ? dd.value : '';
             Array.from(files).forEach(function(file) {
+                // Encode individual path segments so slashes remain separators
+                var segs = selected === '' ? [] : selected.split('/').map(encodeURIComponent);
+                var encName = encodeURIComponent(file.name);
+                var uploadPath = (segs.length ? (segs.join('/') + '/') : '') + encName;
+                var url = '/upload/' + uploadPath;
                 var xhttp = new XMLHttpRequest();
-                xhttp.open('POST', '/upload/' + encodeURIComponent(file.name), true);
+                xhttp.open('POST', url, true);
                 xhttp.send(file);
                 xhttp.onload = function() {
                     if (xhttp.status === 200) {
-                        rootDrop.innerHTML = 'Uploaded ' + file.name + ' successfully!';
-                        setTimeout(function() { rootDrop.innerHTML = 'Drag and drop files here to upload to root directory'; }, 2000);
+                        rootDrop.innerHTML = 'Uploaded ' + file.name + ' → ' + (selected || '/') + ' successfully!';
+                        setTimeout(function() { rootDrop.innerHTML = ROOT_DROP_DEFAULT_HTML; }, 2000);
+                        // Refresh directories in case upload created a new directory
+                        setTimeout(fetchDirectories, 800);
                     } else {
-                        rootDrop.innerHTML = 'Failed to upload ' + file.name;
-                        setTimeout(function() { rootDrop.innerHTML = 'Drag and drop files here to upload to root directory'; }, 2000);
+                        rootDrop.innerHTML = 'Failed to upload ' + file.name + ' (' + xhttp.status + ')';
+                        setTimeout(function() { rootDrop.innerHTML = ROOT_DROP_DEFAULT_HTML; }, 2000);
                     }
                 };
             });
         }
+
+        // Hook up refresh button and populate dir list on load
+        var refreshDirsBtn = document.getElementById('refresh-dirs-btn');
+        if (refreshDirsBtn) refreshDirsBtn.addEventListener('click', fetchDirectories);
+        document.addEventListener('DOMContentLoaded', fetchDirectories);
         </script>
 
         <script>
@@ -494,6 +627,7 @@ confirmBtn.style.color = '#fff';
 confirmBtn.style.border = 'none';
 confirmBtn.style.borderRadius = '6px';
 confirmBtn.style.cursor = 'pointer';
+confirmBtn.className = 'btn';
 
 const cancelBtn = document.createElement('button');
 cancelBtn.textContent = 'Cancel';
@@ -503,6 +637,7 @@ cancelBtn.style.color = '#fff';
 cancelBtn.style.border = 'none';
 cancelBtn.style.borderRadius = '6px';
 cancelBtn.style.cursor = 'pointer';
+cancelBtn.className = 'btn';
 dialogBtns.appendChild(confirmBtn);
 dialogBtns.appendChild(cancelBtn);
 saveDialog.appendChild(dialogBtns);

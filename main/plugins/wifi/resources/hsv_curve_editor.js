@@ -191,14 +191,14 @@ const HSVEditor = (function() {
         <div style="width: 780px; height: 400px; background: #181818; border-radius: 8px; border: 1px solid #181818; margin-bottom: 1em; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;">
           <div style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
             <select id="palette-dropdown" style="font-size:1em; padding:4px 12px; border-radius:4px;"></select>
-            <button id="save-preset-btn" style="font-size:1.1em; padding:4px 16px; background:#2a2a2a; color:#fff; border:none; border-radius:4px; cursor:pointer;">Save Color Palette</button>
+            <button id="save-preset-btn" class="btn">Save Color Palette</button>
           </div>
           <div style="width: 100%; display: flex; flex-direction: row; align-items: center; justify-content: center; margin-top: 16px; margin-bottom: 8px;">
             <canvas id="interpolated-bar" width="512" height="32" style="display:block; margin:1em 0; border-radius:6px; border:1px solid #ccc;"></canvas>
             <div id="hsv-channel-select" style="display: flex; flex-direction: row; align-items: center; margin-left: 24px;">
-              <button type="button" id="btn-hue" style="margin-right:8px; font-weight:bold; background:#e74c3c; color:#fff; border:none; border-radius:4px; padding:6px 18px;">H</button>
-              <button type="button" id="btn-sat" style="margin-right:8px; font-weight:bold; background:#3498db; color:#fff; border:none; border-radius:4px; padding:6px 18px; opacity:0.5;">S</button>
-              <button type="button" id="btn-val" style="font-weight:bold; background:#2ecc40; color:#fff; border:none; border-radius:4px; padding:6px 18px; opacity:0.5;">V</button>
+              <button type="button" id="btn-hue" class="btn btn--channel btn--hue" style="margin-right:8px;">H</button>
+              <button type="button" id="btn-sat" class="btn btn--channel btn--sat btn--muted" style="margin-right:8px;">S</button>
+              <button type="button" id="btn-val" class="btn btn--channel btn--val btn--muted">V</button>
             </div>
           </div>
           <div style="width: 100%; height: 300px; display: flex; align-items: center; justify-content: flex-start;">

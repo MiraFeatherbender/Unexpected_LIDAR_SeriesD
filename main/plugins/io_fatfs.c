@@ -25,6 +25,48 @@ int io_fatfs_list_files(const char *dir_path, char file_list[][64], int max_file
     return count;
 }
 
+// List directories in a path (returns number of dirs, -1 on error)
+int io_fatfs_list_dirs(const char *dir_path, char dir_list[][64], int max_dirs) {
+    DIR *dir = opendir(dir_path);
+    if (!dir) return -1;
+    int count = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) && count < max_dirs) {
+        if (entry->d_type == DT_DIR) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+            strncpy(dir_list[count], entry->d_name, 63);
+            dir_list[count][63] = '\0';
+            count++;
+        }
+    }
+    closedir(dir);
+    return count;
+}
+
+// Recursively create directories in 'dir_path'. Returns true on success (or if already exists).
+bool io_fatfs_mkdir_recursive(const char *dir_path) {
+    if (!dir_path || dir_path[0] == '\0') return false;
+    char tmp[256];
+    strncpy(tmp, dir_path, sizeof(tmp)-1);
+    tmp[sizeof(tmp)-1] = '\0';
+    size_t len = strlen(tmp);
+    if (len == 0) return false;
+    if (tmp[len-1] == '/') tmp[len-1] = '\0';
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, 0755) != 0) {
+                if (errno != EEXIST) return false;
+            }
+            *p = '/';
+        }
+    }
+    if (mkdir(tmp, 0755) != 0) {
+        if (errno != EEXIST) return false;
+    }
+    return true;
+}
+
 int io_fatfs_read_file(const char *file_path, uint8_t *buf, size_t buf_size) {
     ESP_LOGI("io_fatfs", "Attempting to open file: %s", file_path);
     FILE *f = fopen(file_path, "rb");

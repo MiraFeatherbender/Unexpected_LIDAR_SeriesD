@@ -92,8 +92,29 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath, const char *
 
 // --- Centralized upload logic ---
 static esp_err_t handle_upload(httpd_req_t *req, const char *filename) {
+    // Reject directory traversal or absolute paths
+    if (!filename || strstr(filename, "..") || filename[0] == '/') {
+        send_http_error(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
+        return ESP_FAIL;
+    }
+
     char filepath[256];
     snprintf(filepath, sizeof(filepath), "/data/%s", filename);
+
+    // Ensure parent directory exists
+    char parent[256];
+    strncpy(parent, filepath, sizeof(parent));
+    parent[sizeof(parent)-1] = '\0';
+    char *last = strrchr(parent, '/');
+    if (last && last != parent) {
+        *last = '\0';
+        if (!io_fatfs_mkdir_recursive(parent)) {
+            ESP_LOGW(TAG, "Failed to create parent dir: %s", parent);
+            send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create parent directory");
+            return ESP_FAIL;
+        }
+    }
+
     FILE *f = fopen(filepath, "wb");
     if (!f) {
         ESP_LOGW(TAG, "Failed to open for write: %s", filepath);
@@ -125,6 +146,25 @@ static esp_err_t handle_upload(httpd_req_t *req, const char *filename) {
     return ESP_OK;
 }
 
+static esp_err_t directories_list_handler(httpd_req_t *req) {
+    char dir_list[32][64];
+    int count = io_fatfs_list_dirs("/data", dir_list, 32);
+    if (count < 0) {
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to list directories");
+        return ESP_FAIL;
+    }
+    cJSON *root = cJSON_CreateArray();
+    for (int i = 0; i < count; ++i) {
+        cJSON_AddItemToArray(root, cJSON_CreateString(dir_list[i]));
+    }
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+    free(json);
+    return ESP_OK;
+}
+
 // --- Modular handler wrappers ---
 static esp_err_t index_get_handler(httpd_req_t *req) {
     return serve_file(req, "/data/index.html", "text/html");
@@ -141,6 +181,11 @@ static esp_err_t upload_post_handler(httpd_req_t *req) {
     const char *uri = req->uri;
     const char *filename = uri + strlen("/upload/");
     if (strlen(filename) == 0 || strlen(filename) > 200) {
+        send_http_error(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
+        return ESP_FAIL;
+    }
+    // Reject obvious traversal attempts
+    if (strstr(filename, "..") || filename[0] == '/') {
         send_http_error(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
         return ESP_FAIL;
     }
