@@ -58,7 +58,7 @@
             margin: var(--grid-margin);
             max-width: var(--grid-max-width);
             justify-items: center;
-            align-items: start;
+            /* align-items: start; */
         }
         /* Keep column containers as vertical stacks where used */
         .col { display: flex; flex-direction: column; gap: var(--col-gap-vertical); width:100%; }
@@ -94,18 +94,21 @@
         img { border: 2px solid #444; background: #111; max-width: 320px; max-height: fit-content; }
         h1 { margin-top: 1em; }
 
-        /* Responsive: stack panels on small viewports */
-        @media (max-width: 1100px) {
+        /* Responsive: two-column layout on small viewports (blend left, editors+rgb stacked right) */
+        @media (max-width: 1400px) {
             .img-container {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr 1fr;
                 grid-template-areas:
-                    "hsv-preview"
-                    "hsv-editor"
-                    "blend"
-                    "editors"
-                    "rgb";
+                    "hsv-preview hsv-preview"
+                    "hsv-editor hsv-editor"
+                    "blend editors"
+                    "blend rgb";
+                gap: var(--grid-row-gap) 1.5em;
             }
-            .panel { min-width: 280px; max-width: 100%; width: auto !important; }
+            #blend-panel { grid-row: 3 / span 4; justify-self: right; }
+            #editors-panel {justify-self: left; }
+            #rgb-ui-panel { justify-self: left; }
+            #hsv-editor-panel { grid-row: auto; }
             /* Reduce canvas footprints on small screens */
             #hsv-preview-canvas, #ledSim, #blend-canvas { width: var(--canvas-small-size) !important; height: var(--canvas-small-size) !important; }
         }
