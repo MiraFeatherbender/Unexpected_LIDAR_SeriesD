@@ -13,7 +13,7 @@
 #include "freertos/semphr.h"
 #include "rgb_anim_dynamic.h"
 
-#define RGB_CMD_QUEUE_LEN 32
+#define RGB_CMD_QUEUE_LEN 8
 #define RGB_TASK_STACK_SIZE 4096
 #define RGB_TASK_PRIORITY 5
 
