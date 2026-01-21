@@ -1,0 +1,42 @@
+/* Console widget styles */
+:root {
+  --console-bg: #070707;
+  --console-color: #4efc4e;
+  --console-font: "Courier New", monospace;
+  --console-padding: 12px;
+  --console-font-size: 13px;
+  --console-border-radius: 8px;
+  --console-min-height: 160px;
+}
+
+.panel--console { display:flex; flex-direction:column; width:100%; align-items:stretch; }
+.console-output {
+  background: var(--console-bg);
+  color: var(--console-color);
+  font-family: var(--console-font);
+  font-size: var(--console-font-size);
+  padding: var(--console-padding);
+  border-radius: var(--console-border-radius);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: var(--console-min-height);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+}
+
+.console-controls { display:flex; gap:8px; justify-content:flex-end; align-items:center; margin-top:8px; }
+.console-controls .btn { font-size: 0.95em; }
+.console-line { margin: 0 0 0.25em 0; }
+.console-line .ts { color: rgba(255,255,255,0.6); margin-right: 8px; }
+.console-line .msg { color: var(--console-color); }
+.console-line.error .msg { color: #ff6666; }
+.console-line.warn .msg { color: #ffc658; }
+
+/* Ensure console panel fits well in the center column */
+#console-panel { grid-area: console; justify-self: center; min-width: var(--grid-col-center-min); max-width: var(--grid-col-center-min); }
+
+/* Responsive: make console full width on small screens */
+@media (max-width: 1100px) {
+  #console-panel { min-width: 100%; max-width: 100%; }
+}

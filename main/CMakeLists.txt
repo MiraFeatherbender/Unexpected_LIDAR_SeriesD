@@ -25,7 +25,8 @@ idf_component_register(
 
         # WiFi sources
         "plugins/wifi/wifi_http_server.c"
-
+        "plugins/wifi/wifi_sse.c"
+        
         # Battery sources
         "plugins/battery/battery_json.c"
 

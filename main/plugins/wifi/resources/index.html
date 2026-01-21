@@ -49,11 +49,12 @@
         .img-container {
             display: grid;
             grid-template-columns: var(--grid-col-left) minmax(var(--grid-col-center-min) , 1fr) var(--grid-col-right);
-            grid-template-rows: auto auto;
+            grid-template-rows: auto auto auto auto auto;
             /* grid-auto-rows: min-content; */
             grid-template-areas:
                 "blend hsv-preview editors"
-                "blend hsv-editor rgb";
+                "blend hsv-editor rgb"
+                ". console .";
             gap: var(--grid-row-gap) var(--grid-col-gap);
             margin: var(--grid-margin);
             max-width: var(--grid-max-width);
@@ -102,17 +103,19 @@
                     "hsv-preview hsv-preview"
                     "hsv-editor hsv-editor"
                     "blend editors"
-                    "blend rgb";
+                    "blend rgb"
+                    "console console";
                 gap: var(--grid-row-gap) 1.5em;
             }
-            #blend-panel { grid-row: 3 / span 4; justify-self: right; }
-            #editors-panel {justify-self: left; }
-            #rgb-ui-panel { justify-self: left; }
+            #blend-panel { grid-row: 3 / span 2; justify-self: right; }
+            #editors-panel {grid-row: 3; justify-self: left; }
+            #rgb-ui-panel {grid-row: 4; justify-self: left; }
             #hsv-editor-panel { grid-row: auto; }
             /* Reduce canvas footprints on small screens */
             #hsv-preview-canvas, #ledSim, #blend-canvas { width: var(--canvas-small-size) !important; height: var(--canvas-small-size) !important; }
         }
     </style>
+    <link rel="stylesheet" href="console.css">
     <!-- All JS libraries loaded in head, before any inline scripts -->
     <script src="iro.min.js"></script>
     <script src="rgb_ui.js"></script>
@@ -149,6 +152,19 @@
                 <div id="hsv-editor-panel" class="panel panel--wide">
                     <!-- HSV Curve Editor widget will be rendered here -->
                 </div>   
+                <!-- Console Panel (center column, third row) -->
+                <div id="console-panel" class="panel panel--console" role="log" aria-live="polite">
+                    <h2 style="margin-top:0; margin-bottom:0.6em; color:#eee; font-size:1.05em;">Console</h2>
+                    <div id="console-output" class="console-output" aria-label="Event console"></div>
+                    <div class="console-controls">
+                        <button id="console-clear-btn" class="btn btn--compact">Clear</button>
+                        <button id="console-pause-btn" class="btn btn--compact">Pause</button>
+                        <label style="display:flex; align-items:center; gap:6px; color:#ccc;">
+                          <input type="checkbox" id="console-autoscroll-cb" checked> Autoscroll
+                        </label>
+                        <button id="console-download-btn" class="btn btn--compact">Download</button>
+                    </div>
+                </div>
             <div id="blend-panel" class="panel panel--small">
                     <h2 style="margin-bottom:0.5em; color:#eee; font-size:1.1em;">Blended Noise (Canvas)</h2>
                     <canvas id="blend-canvas" width="256" height="256" style="border:2px solid #444; background:#111; max-width:256px; max-height:256px;"></canvas>
@@ -760,6 +776,8 @@ confirmBtn.addEventListener('click', function() {
 });
         </script>
 <script src="battery_levels_widget.js"></script>
+<script src="sse_manager.js"></script>
+<script src="console.js"></script>
 <script>
 // --- Plugin/Palette Association Dropdown Logic ---
 function toTitleCase(str) {

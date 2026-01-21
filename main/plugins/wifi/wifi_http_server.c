@@ -3,6 +3,7 @@
 #include "dispatcher.h"
 #include "io_rgb.h"
 #include "rest_context.h"
+#include "wifi_sse.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "cJSON.h"
@@ -437,6 +438,11 @@ void wifi_http_server_start(void)
     ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
         register_http_server_routes(server);
+        /* Initialize SSE broker (separate httpd instance on its own port) */
+        esp_err_t rc = wifi_sse_init();
+        if (rc != ESP_OK) {
+            ESP_LOGW(TAG, "SSE broker failed to start (rc=%d); continuing without SSE", rc);
+        }
     } else {
         ESP_LOGE(TAG, "Failed to start HTTP server");
     }
