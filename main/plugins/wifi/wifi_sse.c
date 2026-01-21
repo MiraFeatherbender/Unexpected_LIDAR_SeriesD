@@ -8,6 +8,7 @@
 #include "esp_http_server.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
@@ -112,11 +113,32 @@ void wifi_sse_dispatch_handler(const dispatcher_msg_t *msg) {
     if (!msg) return;
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "source", (int)msg->source);
+    cJSON_AddStringToObject(root, "level", "info");
+    /* Use milliseconds since boot; browser Date(number) handles epoch ms-style values */
+    cJSON_AddNumberToObject(root, "time", (double)(esp_timer_get_time() / 1000));
     if (msg->message_len > 0) {
-        /* Add message bytes as a base64-safe string or plain text; for simplicity, treat as string */
-        cJSON_AddStringToObject(root, "data", (const char*)msg->data);
+        if (msg->source == SOURCE_LINE_SENSOR || msg->source == SOURCE_MSC_BUTTON) {
+            size_t hex_len = msg->message_len;
+            if (hex_len > 32) hex_len = 32; // limit payload size
+            char hexbuf[32 * 3 + 1] = {0};
+            size_t off = 0;
+            for (size_t i = 0; i < hex_len; ++i) {
+                off += snprintf(hexbuf + off, sizeof(hexbuf) - off, "%02X ", msg->data[i]);
+                if (off >= sizeof(hexbuf)) break;
+            }
+            if (off > 0 && off < sizeof(hexbuf)) {
+                hexbuf[off - 1] = '\0'; // trim trailing space
+            }
+            cJSON_AddStringToObject(root, "data", hexbuf);
+            cJSON_AddStringToObject(root, "msg", hexbuf);
+        } else {
+            /* Add message bytes as a base64-safe string or plain text; for simplicity, treat as string */
+            cJSON_AddStringToObject(root, "data", (const char*)msg->data);
+            cJSON_AddStringToObject(root, "msg", (const char*)msg->data);
+        }
     } else {
         cJSON_AddNullToObject(root, "data");
+        cJSON_AddStringToObject(root, "msg", "");
     }
 
     /* For each target entry in the message, forward if it's an SSE target */

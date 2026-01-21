@@ -44,6 +44,16 @@ typedef struct {
     void *context; // optional context pointer
 } dispatcher_msg_t;
 
+// Helper: fill target array with sentinel
+static inline void dispatcher_fill_targets_impl(dispatch_target_t *targets, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        targets[i] = TARGET_MAX;
+    }
+}
+
+#define dispatcher_fill_targets(targets_array) \
+    dispatcher_fill_targets_impl((targets_array), sizeof(targets_array) / sizeof((targets_array)[0]))
+
 typedef void (*dispatcher_handler_t)(const dispatcher_msg_t *msg);
 
 void dispatcher_init(void);

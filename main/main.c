@@ -8,7 +8,7 @@
 #include "io_battery.h"
 #include "rgb_anim.h"
 #include "rgb_anim_all.h"
-
+#include "io_log.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -32,6 +32,7 @@ void app_main(void)
     io_lidar_init();
     lidar_coordinator_init();
     io_battery_init();
+    io_log_init();
 
     // Start Wi-Fi AP
     io_wifi_ap_init();

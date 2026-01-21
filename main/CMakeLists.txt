@@ -16,6 +16,7 @@ idf_component_register(
         "plugins/io_battery.c"
         "plugins/io_wifi_ap.c"
         "plugins/io_fatfs.c"
+        "plugins/io_log.c"
 
         # Animation sources (auto-discovered)
         ${RGB_ANIMATION_SOURCES}
@@ -47,6 +48,7 @@ idf_component_register(
         fatfs
         wear_levelling
         esp_partition
+        esp_timer
         
     INCLUDE_DIRS
         "."               # main/
