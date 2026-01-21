@@ -34,6 +34,9 @@ idf_component_register(
         # Library sources
         "src/UMSeriesD_idf.c"
 
+        # Modules
+        "plugins/mod_line_sensor_window.c"
+
     REQUIRES
         esp_wifi
         esp_http_server
@@ -49,7 +52,7 @@ idf_component_register(
         wear_levelling
         esp_partition
         esp_timer
-        
+
     INCLUDE_DIRS
         "."               # main/
         "plugins"         # io_*.h
