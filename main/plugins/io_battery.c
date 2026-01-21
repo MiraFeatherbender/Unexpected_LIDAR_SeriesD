@@ -12,7 +12,7 @@
 
 #define BATTERY_TASK_STACK_SIZE 8192
 #define BATTERY_TASK_PRIORITY   5
-#define BATTERY_CHECK_INTERVAL_MS 3000
+#define BATTERY_CHECK_INTERVAL_MS 300
 
 // Forward declaration
 static void io_battery_task(void *arg);
@@ -27,15 +27,6 @@ static int battery_percent_from_voltage(float v)
     float pct = (v - 3.30f) / (4.20f - 3.30f);
     return (int)(pct * 100.0f);
 }
-
-
-// Central struct for RGB plugin, HSV, and brightness per tier
-// typedef struct {
-//     float min_voltage;
-//     bool vbus_required; // true: charging, false: discharging
-//     uint8_t plugin;
-//     uint8_t h, s, v, brightness;
-// } battery_rgb_tier_t;
 
 static const battery_rgb_tier_t battery_rgb_tiers[] = {
     // Charging tiers
@@ -73,6 +64,8 @@ static const battery_rgb_tier_t* battery_get_rgb_tier(float voltage, bool vbus) 
 
 void io_battery_init(void)
 {
+    ums3_set_pixel_brightness(0); // Turn off RGB initially
+
     // Initialize MAX17048 fuel gauge
     ums3_fg_setup();
 

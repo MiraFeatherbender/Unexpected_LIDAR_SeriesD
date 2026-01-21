@@ -1,5 +1,6 @@
 #include "io_rgb.h"
 #include "dispatcher.h"
+#include "dispatcher_module.h"
 #include "UMSeriesD_idf.h"
 #include "rgb_anim.h"
 #include "rest_context.h"
@@ -16,8 +17,21 @@
 #define RGB_TASK_STACK_SIZE 4096
 #define RGB_TASK_PRIORITY 5
 
-// Queue for incoming RGB commands
-static QueueHandle_t rgb_cmd_queue = NULL;
+static void io_rgb_process_msg(const dispatcher_msg_t *msg);
+static void io_rgb_step_frame(void);
+
+static dispatcher_module_t io_rgb_mod = {
+    .name = "io_rgb_task",
+    .target = TARGET_RGB,
+    .queue_len = RGB_CMD_QUEUE_LEN,
+    .stack_size = RGB_TASK_STACK_SIZE,
+    .task_prio = RGB_TASK_PRIORITY,
+    .process_msg = io_rgb_process_msg,
+    .step_frame = io_rgb_step_frame,
+    .step_ms = 33,
+    .queue = NULL,
+    .next_step = 0
+};
 
 typedef enum {
     RGB_PLUGIN_TYPE_HSV = 0,
@@ -32,6 +46,8 @@ typedef struct {
         const rgb_anim_t *rgb;
     } plugin;
 } rgb_plugin_entry_t;
+
+static uint8_t anim_brightness = 0;
 
 // Plugin registry (dispatcher‑style)
 static rgb_plugin_entry_t rgb_plugins[RGB_PLUGIN_MAX] = {0};
@@ -112,7 +128,6 @@ static const uint8_t rgb_src[6][3] = {
     { SRC_V, SRC_P, SRC_Q }, // region 5
 };
 
-static uint8_t anim_brightness = 255;
 
 void io_rgb_set_anim_brightness(uint8_t b)
 {
@@ -169,15 +184,10 @@ void io_rgb_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
     io_rgb_register_hsv_plugin(id, plugin);
 }
 
-// Forward declaration
-static void io_rgb_task(void *arg);
-
 // Dispatcher handler — messages routed TO RGB
 static void io_rgb_dispatcher_handler(const dispatcher_msg_t *msg)
 {
-    // ESP_LOGI("io_rgb", "xQueueSend: source=%d, context=%p", msg->source, msg->context);
-    if (xQueueSend(rgb_cmd_queue, msg, 0) != pdTRUE) {
-        ESP_LOGW("io_rgb", "xQueueSend FAILED: source=%d, context=%p", msg->source, msg->context);
+    if (!io_rgb_mod.queue || xQueueSend(io_rgb_mod.queue, msg, 0) != pdTRUE) {
         // If queue is full and this is a REST GET, signal failure immediately
         if (msg->source == SOURCE_REST && msg->context) {
             rest_json_request_t *req = (rest_json_request_t *)msg->context;
@@ -190,22 +200,11 @@ static void io_rgb_dispatcher_handler(const dispatcher_msg_t *msg)
 void io_rgb_init(void)
 {
     // Initialize RGB hardware
-    ums3_set_pixel_brightness(current_brightness);
+    ums3_set_pixel_brightness(anim_brightness);
     ums3_set_pixel_color(0, 0, 0);    
     
-    // Create command queue
-    rgb_cmd_queue = xQueueCreate(RGB_CMD_QUEUE_LEN, sizeof(dispatcher_msg_t));
-
-    // Register with dispatcher
-    dispatcher_register_handler(TARGET_RGB, io_rgb_dispatcher_handler);
-
-    // Start RGB task
-    xTaskCreate(io_rgb_task,
-                "io_rgb_task",
-                RGB_TASK_STACK_SIZE,
-                NULL,
-                RGB_TASK_PRIORITY,
-                NULL);
+    // Create command queue + register handler + start task
+    dispatcher_module_start(&io_rgb_mod, io_rgb_dispatcher_handler);
 }
 
 
@@ -267,95 +266,88 @@ static void io_rgb_generate_json(rest_json_request_t *req) {
 }
 
 
-static void default_action(dispatcher_msg_t *msg)
+static void default_action(const dispatcher_msg_t *msg)
 {
-    if (msg->message_len >= 5) {
-        uint8_t plugin_id = msg->data[0];
-        uint8_t h = msg->data[1];
-        uint8_t s = msg->data[2];
-        uint8_t v = msg->data[3];
-        uint8_t brightness = msg->data[4];
-        rgb_set_animation(plugin_id, h, s, v, brightness);
-    }
-    return;
+    if (!msg || msg->message_len < 5) return;
+    uint8_t plugin_id = msg->data[0];
+    uint8_t h = msg->data[1];
+    uint8_t s = msg->data[2];
+    uint8_t v = msg->data[3];
+    uint8_t brightness = msg->data[4];
+    rgb_set_animation(plugin_id, h, s, v, brightness);
 }
 
-static void io_rgb_task(void *arg)
+static TickType_t rest_off_until = 0;
+
+static void io_rgb_process_msg(const dispatcher_msg_t *msg)
 {
-    dispatcher_msg_t msg = {0};
-    TickType_t rest_off_until = 0;
+    if (!msg) return;
+    priority |= (1ULL << msg->source);
 
-    while (1) {
+    if ((priority >> (msg->source + 1)) != 0) {
+        // Higher priority source active, ignore this message
+        return;
+    }
 
-        // Clear REST priority if timeout elapsed
-        if (rest_off_until != 0 && xTaskGetTickCount() >= rest_off_until) {
-            // Clear REST priority after timeout
-            priority &= ~(1ULL << SOURCE_REST);
-            rest_off_until = 0;
-        }
-
-        if (xQueueReceive(rgb_cmd_queue, &msg, 0) == pdTRUE) {
-            priority |= (1ULL << msg.source);
-
-            if ((priority >> (msg.source + 1)) != 0) {
-                // Higher priority source active, ignore this message
-                continue;
+    switch (msg->source) {
+        case SOURCE_REST:
+            if (msg->context) {
+                rest_json_request_t *req = (rest_json_request_t *)msg->context;
+                // ESP_LOGI("io_rgb", "SOURCE_REST: GET context path entered, context=%p, sem=%p", msg->context, req->sem);
+                io_rgb_generate_json(req);
+                xSemaphoreGive(req->sem);
             }
-
-            switch (msg.source) {
-                case SOURCE_REST:
-                    if (msg.context) {
-                        rest_json_request_t *req = (rest_json_request_t *)msg.context;
-                        ESP_LOGI("io_rgb", "SOURCE_REST: GET context path entered, context=%p, sem=%p", msg.context, req->sem);
-                        io_rgb_generate_json(req);
-                        xSemaphoreGive(req->sem);
+            else {
+                // Extended REST command: optional command byte at data[5]
+                if (msg->message_len >= 6) {
+                    uint8_t cmd = msg->data[5];
+                    switch (cmd) {
+                        case RGB_CMD_RELOAD:
+                            // ESP_LOGI("io_rgb", "RGB_CMD_RELOAD command received (REST)");
+                            rgb_anim_dynamic_reload();
+                            break;
+                        default:
+                            break;
                     }
-                    else {
-                        // Extended REST command: optional command byte at data[5]
-                        if (msg.message_len >= 6) {
-                            uint8_t cmd = msg.data[5];
-                            switch (cmd) {
-                                case RGB_CMD_RELOAD:
-                                    ESP_LOGI("io_rgb", "RGB_CMD_RELOAD command received (REST)");
-                                    rgb_anim_dynamic_reload();
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                        // REST command to change RGB
-                        if(msg.data[0] == RGB_PLUGIN_OFF) {
-                            rest_off_until = xTaskGetTickCount() + pdMS_TO_TICKS(5000); // 5 seconds off
-                        }
-                        default_action(&msg);
-                    }
-                    break;
-                default:
-                    default_action(&msg);
-                    break;
+                }
+                // REST command to change RGB
+                if (msg->data[0] == RGB_PLUGIN_OFF) {
+                    rest_off_until = xTaskGetTickCount() + pdMS_TO_TICKS(5000); // 5 seconds off
+                }
+                default_action(msg);
             }
-        }
+            break;
+        default:
+            default_action(msg);
+            break;
+    }
+}
 
-        // Run active animation and get HSV output
-        if (active_anim && active_anim->type == RGB_PLUGIN_TYPE_HSV && active_anim->plugin.hsv) {
-            hsv_color_t out_hsv = current_hsv;
-            if (active_anim->plugin.hsv->step)
-                active_anim->plugin.hsv->step(&out_hsv);
+static void io_rgb_step_frame(void)
+{
+    // Clear REST priority if timeout elapsed
+    if (rest_off_until != 0 && xTaskGetTickCount() >= rest_off_until) {
+        priority &= ~(1ULL << SOURCE_REST);
+        rest_off_until = 0;
+    }
 
-            // Convert HSV to RGB and output
-            uint8_t r, g, b;
-            hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &r, &g, &b);
-            ums3_set_pixel_brightness(anim_brightness);
-            ums3_set_pixel_color(r, g, b);
-        } else if (active_anim && active_anim->type == RGB_PLUGIN_TYPE_RGB && active_anim->plugin.rgb) {
-            rgb_color_t out_rgb = {0, 0, 0};
-            if (active_anim->plugin.rgb->step)
-                active_anim->plugin.rgb->step(&out_rgb);
+    // Run active animation and get HSV output
+    if (active_anim && active_anim->type == RGB_PLUGIN_TYPE_HSV && active_anim->plugin.hsv) {
+        hsv_color_t out_hsv = current_hsv;
+        if (active_anim->plugin.hsv->step)
+            active_anim->plugin.hsv->step(&out_hsv);
 
-            ums3_set_pixel_brightness(anim_brightness);
-            ums3_set_pixel_color(out_rgb.r, out_rgb.g, out_rgb.b);
-        }
+        // Convert HSV to RGB and output
+        uint8_t r, g, b;
+        hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &r, &g, &b);
+        ums3_set_pixel_brightness(anim_brightness);
+        ums3_set_pixel_color(r, g, b);
+    } else if (active_anim && active_anim->type == RGB_PLUGIN_TYPE_RGB && active_anim->plugin.rgb) {
+        rgb_color_t out_rgb = {0, 0, 0};
+        if (active_anim->plugin.rgb->step)
+            active_anim->plugin.rgb->step(&out_rgb);
 
-        vTaskDelay(pdMS_TO_TICKS(33)); // ~30 FPS
+        ums3_set_pixel_brightness(anim_brightness);
+        ums3_set_pixel_color(out_rgb.r, out_rgb.g, out_rgb.b);
     }
 }

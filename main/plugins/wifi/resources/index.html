@@ -32,6 +32,13 @@
             --rgb-max: 360px;
 
             --canvas-small-size: 220px;
+            /* Line sensor grid sizing */
+            --bit-cell-size: 18px;
+            --bit-row-gap: 4px;
+            --line-sensor-rows-min: 16;
+            --line-sensor-rows-max: 32;
+            --line-sensor-row-height-min: calc((var(--bit-cell-size) * var(--line-sensor-rows-min)) + (var(--bit-row-gap) * (var(--line-sensor-rows-min) - 1)) + 80px);
+            --line-sensor-row-height-max: calc((var(--bit-cell-size) * var(--line-sensor-rows-max)) + (var(--bit-row-gap) * (var(--line-sensor-rows-max) - 1)) + 80px);
 
             --btn-bg: #2a2a2a;
             --btn-bg-hover: #343434;
@@ -49,12 +56,12 @@
         .img-container {
             display: grid;
             grid-template-columns: var(--grid-col-left) minmax(var(--grid-col-center-min) , 1fr) var(--grid-col-right);
-            grid-template-rows: auto auto auto auto auto;
+            grid-template-rows: auto auto minmax(var(--line-sensor-row-height-min), var(--line-sensor-row-height-max)) auto auto;
             /* grid-auto-rows: min-content; */
             grid-template-areas:
                 "blend hsv-preview editors"
                 "blend hsv-editor rgb"
-                ". console .";
+                "line_sensor console .";
             gap: var(--grid-row-gap) var(--grid-col-gap);
             margin: var(--grid-margin);
             max-width: var(--grid-max-width);
@@ -152,6 +159,23 @@
                 <div id="hsv-editor-panel" class="panel panel--wide">
                     <!-- HSV Curve Editor widget will be rendered here -->
                 </div>   
+                <!-- Line sensor panel (left of console) -->
+                <div id="line-sensor-panel" class="panel panel--small" role="region" aria-label="Line Sensor">
+                    <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                      <h2 style="margin:0; color:#eee; font-size:1.05em;">Line Sensor</h2>
+                      <div class="line-sensor-controls" style="display:flex; gap:8px; align-items:center;">
+                        <label style="color:#ccc; font-size:0.9em;">Bit order:
+                          <select id="line-sensor-bitorder" style="margin-left:6px; background:#222; color:#eee; border:1px solid #333; padding:4px 8px;">
+                            <option value="msb">MSB</option>
+                            <option value="lsb">LSB</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                    <div id="line-sensor-grid" class="bit-grid" aria-hidden="false" style="width:100%; overflow:auto; min-height:64px; margin-top:8px;">
+                        <!-- Bit rows will be injected here -->
+                    </div>
+                </div>
                 <!-- Console Panel (center column, third row) -->
                 <div id="console-panel" class="panel panel--console" role="log" aria-live="polite">
                     <h2 style="margin-top:0; margin-bottom:0.6em; color:#eee; font-size:1.05em;">Console</h2>
@@ -778,7 +802,9 @@ confirmBtn.addEventListener('click', function() {
         </script>
 <script src="battery_levels_widget.js"></script>
 <script src="sse_manager.js"></script>
-<script src="console.js"></script>
+<script src="sse_helpers.js"></script>
+    <script src="line_sensor_panel.js"></script>
+    <script src="console.js"></script>
 <script>
 // --- Plugin/Palette Association Dropdown Logic ---
 function toTitleCase(str) {

@@ -103,9 +103,11 @@ void IRAM_ATTR button_gpio_isr(void *arg) {
     switch(button_state){
         case(0x5A):
             msg.target_id[0] = TARGET_LOG;
+            msg.target_id[1] = TARGET_USB_MSC;
             break;
         case(0xA5):
             msg.target_id[0] = TARGET_LOG;
+            msg.target_id[1] = TARGET_USB_MSC;
             break;
     }
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -125,8 +127,7 @@ void IRAM_ATTR line_sensor_gpio_isr(void *arg) {
         packed 
     };
     dispatcher_fill_targets(msg.target_id);
-    msg.target_id[0] = TARGET_LOG; 
-    msg.target_id[1] = TARGET_SSE_CONSOLE; 
+    memcpy(msg.target_id, ctx->target_id, sizeof(msg.target_id));
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xQueueSendFromISR(ctx->queue, &msg, &xHigherPriorityTaskWoken);
     if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
@@ -159,7 +160,7 @@ void setup_line_sensor(void) {
         .pins = pins,
         .pin_count = 8,
         .source_id = SOURCE_LINE_SENSOR, // Example source ID
-        .target_id[0] = TARGET_LOG, // Example target ID
+        .target_id[0] = TARGET_LINE_SENSOR_WINDOW,
     };
     ctx.queue = gpio_event_queue;
    

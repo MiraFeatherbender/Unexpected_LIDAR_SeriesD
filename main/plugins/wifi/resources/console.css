@@ -19,9 +19,16 @@
   border-radius: var(--console-border-radius);
   white-space: pre-wrap;
   word-break: break-word;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
+  box-sizing: border-box;
   flex: 1 1 auto;
-  min-height: var(--console-min-height);
+  /* Inner area min height derived from line sensor min minus header/controls */
+  min-height: calc(var(--line-sensor-row-height-min) - 80px);
+  /* Limit console inner area so panel height stays consistent with line sensor row min */
+  max-height: calc(var(--line-sensor-row-height-min) - 80px);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);  
 }
 
@@ -34,9 +41,22 @@
 .console-line.warn .msg { color: #ffc658; }
 
 /* Ensure console panel fits well in the center column */
-#console-panel { grid-area: console; justify-self: center; min-width: var(--grid-col-center-min); max-width: var(--grid-col-center-min); }
+#console-panel { grid-area: console; justify-self: center; min-width: var(--grid-col-center-min); max-width: var(--grid-col-center-min); align-self: start; /* Cap console row height to match line sensor min height */ max-height: var(--line-sensor-row-height-min); min-height: var(--line-sensor-row-height-min); overflow: hidden; }
 
 /* Responsive: make console full width on small screens */
 @media (max-width: var(--grid-col-center-min)) {
   #console-panel { min-width: 100%; max-width: 100%; }
 }
+
+/* Line sensor panel styles */
+#line-sensor-panel { grid-area: line_sensor; justify-self: center; min-width: var(--blend-min); max-width: var(--blend-max); align-self: start; overflow:auto; min-height: var(--line-sensor-row-height-min); max-height: var(--line-sensor-row-height-max); }
+.bit-grid { display:flex; flex-direction:column; gap:var(--bit-row-gap); align-items:center; padding:6px 0; }
+.bit-row { display:grid; grid-template-columns: repeat(8, var(--bit-cell-size)); gap:var(--bit-row-gap); width: calc((var(--bit-cell-size) * 8) + (var(--bit-row-gap) * 7)); justify-content:center; }
+.bit-cell { width: var(--bit-cell-size); height: var(--bit-cell-size); position:relative; background:#101010; border:1px solid #222; box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
+.bit-cell > .dot { position:absolute; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; font-size:0.65em; color:#000; }
+.bit-cell.on { background: linear-gradient(180deg, #ffcc66, #ff6600); }
+.bit-cell.on > .dot { color:#111; }
+.bit-row-label { color:#aaa; font-size:0.75em; text-align:left; margin-left:6px; }
+.line-sensor-controls { display:flex; gap:8px; align-items:center; }
+.line-sensor-controls select { background:#222; color:#eee; border:1px solid #333; padding:4px 8px; border-radius:4px; }
+.line-sensor-controls label { color:#ccc; font-size:0.9em; }

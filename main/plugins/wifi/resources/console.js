@@ -93,6 +93,8 @@
       SSEManager.subscribe('console', function(obj) {
         addConsoleLine(obj);
       });
+
+      // Line sensor messages are handled by the Line Sensor panel (line_sensor_panel.js).
       if (sseBtn) {
         const updateSseButton = function(state) {
           const requested = SSEManager.isRequested && SSEManager.isRequested();
@@ -115,6 +117,8 @@
         if (SSEManager.onStatusChange) {
           SSEManager.onStatusChange(updateSseButton);
         }
+        // Auto-connect SSE on page load and set button state accordingly
+        SSEManager.connect();
         updateSseButton();
       }
     }

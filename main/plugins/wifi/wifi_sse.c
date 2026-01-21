@@ -70,6 +70,34 @@ static uint64_t build_mask_from_csv(const char *csv) {
     return mask;
 }
 
+/* Simple base64 encoder (outputs null-terminated string). Returns output length or 0 on failure. */
+static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static size_t base64_encode(const uint8_t *in, size_t in_len, char *out, size_t out_size) {
+    if (!out) return 0;
+    size_t needed = ((in_len + 2) / 3) * 4;
+    if (out_size < needed + 1) return 0;
+    size_t i = 0, o = 0;
+    while (i + 2 < in_len) {
+        uint32_t v = ((uint32_t)in[i] << 16) | ((uint32_t)in[i+1] << 8) | (uint32_t)in[i+2];
+        out[o++] = b64_table[(v >> 18) & 0x3F];
+        out[o++] = b64_table[(v >> 12) & 0x3F];
+        out[o++] = b64_table[(v >> 6) & 0x3F];
+        out[o++] = b64_table[v & 0x3F];
+        i += 3;
+    }
+    int rem = in_len - i;
+    if (rem) {
+        uint32_t v = (uint32_t)in[i] << 16;
+        if (rem == 2) v |= (uint32_t)in[i+1] << 8;
+        out[o++] = b64_table[(v >> 18) & 0x3F];
+        out[o++] = b64_table[(v >> 12) & 0x3F];
+        out[o++] = (rem == 2) ? b64_table[(v >> 6) & 0x3F] : '=';
+        out[o++] = '=';
+    }
+    out[o] = '\0';
+    return o;
+}
+
 void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload) {
     if (!payload) return;
     const char *ename = target_to_event_name(target);
@@ -117,24 +145,46 @@ void wifi_sse_dispatch_handler(const dispatcher_msg_t *msg) {
     /* Use milliseconds since boot; browser Date(number) handles epoch ms-style values */
     cJSON_AddNumberToObject(root, "time", (double)(esp_timer_get_time() / 1000));
     if (msg->message_len > 0) {
-        if (msg->source == SOURCE_LINE_SENSOR || msg->source == SOURCE_MSC_BUTTON) {
-            size_t hex_len = msg->message_len;
-            if (hex_len > 32) hex_len = 32; // limit payload size
-            char hexbuf[32 * 3 + 1] = {0};
-            size_t off = 0;
-            for (size_t i = 0; i < hex_len; ++i) {
-                off += snprintf(hexbuf + off, sizeof(hexbuf) - off, "%02X ", msg->data[i]);
-                if (off >= sizeof(hexbuf)) break;
+        switch (msg->source) {
+            case SOURCE_LINE_SENSOR:
+            case SOURCE_MSC_BUTTON:
+            case SOURCE_LINE_SENSOR_WINDOW: {
+                size_t byte_len = msg->message_len;
+                if (byte_len > 32) byte_len = 32; // limit payload size
+
+                /* Hex representation (backwards compatible for console/log) */
+                char hexbuf[32 * 3 + 1] = {0};
+                size_t off = 0;
+                for (size_t i = 0; i < byte_len; ++i) {
+                    off += snprintf(hexbuf + off, sizeof(hexbuf) - off, "%02X ", msg->data[i]);
+                    if (off >= sizeof(hexbuf)) break;
+                }
+                if (off > 0 && off < sizeof(hexbuf)) {
+                    hexbuf[off - 1] = '\0'; // trim trailing space
+                }
+                cJSON_AddStringToObject(root, "data", hexbuf); // legacy field
+                cJSON_AddStringToObject(root, "msg", hexbuf);
+
+                /* Base64 representation for machine/UI parsing */
+                char b64buf[( (32 + 2) / 3 * 4 ) + 1];
+                size_t b64_len = base64_encode(msg->data, byte_len, b64buf, sizeof(b64buf));
+                if (b64_len) {
+                    cJSON_AddStringToObject(root, "data_b64", b64buf);
+                }
+
+                /* Metadata for unambiguous parsing */
+                cJSON_AddStringToObject(root, "schema", "line_sensor.v1");
+                cJSON_AddNumberToObject(root, "byte_count", (int)byte_len);
+                cJSON_AddStringToObject(root, "bit_order", "msb");
+
+                break;
             }
-            if (off > 0 && off < sizeof(hexbuf)) {
-                hexbuf[off - 1] = '\0'; // trim trailing space
+            default: {
+                /* Add message bytes as a base64-safe string or plain text; for simplicity, treat as string */
+                cJSON_AddStringToObject(root, "data", (const char*)msg->data);
+                cJSON_AddStringToObject(root, "msg", (const char*)msg->data);
+                break;
             }
-            cJSON_AddStringToObject(root, "data", hexbuf);
-            cJSON_AddStringToObject(root, "msg", hexbuf);
-        } else {
-            /* Add message bytes as a base64-safe string or plain text; for simplicity, treat as string */
-            cJSON_AddStringToObject(root, "data", (const char*)msg->data);
-            cJSON_AddStringToObject(root, "msg", (const char*)msg->data);
         }
     } else {
         cJSON_AddNullToObject(root, "data");

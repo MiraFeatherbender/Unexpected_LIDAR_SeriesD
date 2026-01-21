@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_dsp.h" // for convolution operations
+#include "esp_heap_caps.h"
 #include "noise_data.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -20,7 +21,8 @@
 #define IMAGE_DIR "/data/images/"
 #define STBI_ONLY_PNG
 
-static uint8_t buffer[8192]; // 8KB buffer for JSON file
+static uint8_t *buffer = NULL; // 8KB buffer for JSON file
+static size_t buffer_len = 8192;
 
 
 // --- Animation Buffers ---
@@ -322,6 +324,15 @@ void alloc_png_bufs(void) {
 }
 
 void rgb_anim_dynamic_init(void) {
+    if (!buffer) {
+        buffer = (uint8_t *)heap_caps_malloc(buffer_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!buffer) {
+            buffer = (uint8_t *)malloc(buffer_len);
+        }
+        if (!buffer) {
+            ESP_LOGE("rgb_anim_dynamic", "Failed to allocate JSON buffer");
+        }
+    }
     // Load and parse JSON config file
     rgb_anim_dynamic_reload();
 
@@ -342,7 +353,11 @@ void rgb_anim_dynamic_init(void) {
 }
 
 bool rgb_anim_dynamic_reload(void) {
-    int read_bytes = io_fatfs_read_file(RGB_ANIM_JSON_PATH, buffer, sizeof(buffer)-1);
+    if (!buffer) {
+        ESP_LOGE("rgb_anim_dynamic", "JSON buffer not allocated");
+        return false;
+    }
+    int read_bytes = io_fatfs_read_file(RGB_ANIM_JSON_PATH, buffer, buffer_len - 1);
     if (read_bytes <= 0) {
         // Failed to read JSON file
         return false;

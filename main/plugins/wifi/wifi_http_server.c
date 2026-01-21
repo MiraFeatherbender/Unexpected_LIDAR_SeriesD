@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <esp_http_server.h>
 #include <esp_log.h>
+#include <esp_heap_caps.h>
 
 #define TAG "wifi_http_server"
 #define INDEX_PATH "/data/index.html"
@@ -38,7 +39,8 @@ static const char *get_mime_type(const char *filename) {
 
 
 // --- Centralized buffer for file operations ---
-static uint8_t file_op_buf[2048];
+static uint8_t *file_op_buf = NULL;
+static size_t file_op_buf_len = 2048;
 
 // --- Centralized error response helper ---
 static const char *status_str(int status) {
@@ -64,6 +66,11 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath, const char *
         send_http_error(req, HTTPD_404_NOT_FOUND, "File not found");
         return ESP_FAIL;
     }
+    if (!file_op_buf) {
+        ESP_LOGE(TAG, "file_op_buf not allocated");
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server buffer not available");
+        return ESP_FAIL;
+    }
     FILE *f = fopen(filepath, "rb");
     if (!f) {
         ESP_LOGW(TAG, "fopen failed for: %s", filepath);
@@ -75,7 +82,7 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath, const char *
     httpd_resp_set_hdr(req, "Connection", "close");
     int total_bytes = 0;
     while (1) {
-        int bytes = fread(file_op_buf, 1, sizeof(file_op_buf), f);
+        int bytes = fread(file_op_buf, 1, file_op_buf_len, f);
         if (bytes > 0) {
             esp_err_t ret = httpd_resp_send_chunk(req, (const char *)file_op_buf, bytes);
             if (ret != ESP_OK) {
@@ -85,7 +92,7 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath, const char *
             }
             total_bytes += bytes;
         }
-        if (bytes < sizeof(file_op_buf)) break;
+        if (bytes < file_op_buf_len) break;
     }
     fclose(f);
     httpd_resp_send_chunk(req, NULL, 0);
@@ -124,10 +131,16 @@ static esp_err_t handle_upload(httpd_req_t *req, const char *filename) {
         send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file for writing");
         return ESP_FAIL;
     }
+    if (!file_op_buf) {
+        ESP_LOGE(TAG, "file_op_buf not allocated");
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server buffer not available");
+        fclose(f);
+        return ESP_FAIL;
+    }
     int remaining = req->content_len;
     int total_bytes = 0;
     while (remaining > 0) {
-        int to_read = remaining > sizeof(file_op_buf) ? sizeof(file_op_buf) : remaining;
+        int to_read = remaining > file_op_buf_len ? file_op_buf_len : remaining;
         int read = httpd_req_recv(req, (char *)file_op_buf, to_read);
         if (read <= 0) {
             fclose(f);
@@ -233,12 +246,18 @@ static esp_err_t dispatch_from_rest(const httpd_req_t *req, void *user_ctx, cons
     return ESP_OK;
 }
 
-static char rest_json_buf[1024];
+static char *rest_json_buf = NULL;
+static size_t rest_json_buf_len = 1024;
 
 static esp_err_t json_get_handler(httpd_req_t *req) {
+    if (!rest_json_buf) {
+        ESP_LOGE(TAG, "rest_json_buf not allocated");
+        send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server buffer not available");
+        return ESP_FAIL;
+    }
     rest_json_request_t rest_ctx = {
         .json_buf = rest_json_buf,
-        .buf_size = sizeof(rest_json_buf),
+        .buf_size = rest_json_buf_len,
         .json_len = NULL,
         .sem = xSemaphoreCreateBinary(),
         .user_data = NULL
@@ -255,7 +274,7 @@ static esp_err_t json_get_handler(httpd_req_t *req) {
     }
 
 
-    ESP_LOGI(TAG, "Dispatching REST GET for RGB JSON (target=%p, sem=%p)", target, rest_ctx.sem);
+    // ESP_LOGI(TAG, "Dispatching REST GET for RGB JSON (target=%p, sem=%p)", target, rest_ctx.sem);
     esp_err_t err = dispatch_from_rest(req, target, &rest_ctx, sizeof(rest_ctx));
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Dispatch failed for RGB JSON");
@@ -264,14 +283,14 @@ static esp_err_t json_get_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "Waiting for RGB JSON semaphore (timeout=20s, sem=%p)", rest_ctx.sem);
+    // ESP_LOGI(TAG, "Waiting for RGB JSON semaphore (timeout=20s, sem=%p)", rest_ctx.sem);
     if (xSemaphoreTake(rest_ctx.sem, pdMS_TO_TICKS(20000)) != pdTRUE) {
         ESP_LOGE(TAG, "Timeout waiting for RGB JSON semaphore");
         send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Timeout waiting for JSON");
         vSemaphoreDelete(rest_ctx.sem);
         return ESP_FAIL;
     }
-    ESP_LOGI(TAG, "RGB JSON semaphore taken, sending response");
+    // ESP_LOGI(TAG, "RGB JSON semaphore taken, sending response");
 
     vSemaphoreDelete(rest_ctx.sem);
     httpd_resp_set_type(req, "application/json");
@@ -332,8 +351,7 @@ static esp_err_t rgb_handler(httpd_req_t *req) {
             return ESP_FAIL;
     }
 
-    // Dummy implementation for RGB control
-    ESP_LOGI(TAG, "RGB handler invoked");
+    // ESP_LOGI(TAG, "RGB handler invoked");
     httpd_resp_sendstr(req, "RGB control not implemented yet");
     return ESP_OK;
 }
@@ -426,6 +444,24 @@ static esp_err_t register_http_server_routes(httpd_handle_t server) {
 void wifi_http_server_start(void)
 {
     if (server) return;
+    if (!file_op_buf) {
+        file_op_buf = (uint8_t *)heap_caps_malloc(file_op_buf_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!file_op_buf) {
+            file_op_buf = (uint8_t *)malloc(file_op_buf_len);
+        }
+        if (!file_op_buf) {
+            ESP_LOGE(TAG, "Failed to allocate file_op_buf");
+        }
+    }
+    if (!rest_json_buf) {
+        rest_json_buf = (char *)heap_caps_malloc(rest_json_buf_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!rest_json_buf) {
+            rest_json_buf = (char *)malloc(rest_json_buf_len);
+        }
+        if (!rest_json_buf) {
+            ESP_LOGE(TAG, "Failed to allocate rest_json_buf");
+        }
+    }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192; // or 4096, depending on your needs
     config.server_port = 80;
@@ -441,9 +477,9 @@ void wifi_http_server_start(void)
     size_t route_count = sizeof(http_server_routes) / sizeof(http_server_routes[0]);
     /* +2 for SSE handlers, +1 for catch-all route registered after SSE */
     config.max_uri_handlers = (int)route_count + 3;
-    ESP_LOGI(TAG, "Setting max_uri_handlers = %d", config.max_uri_handlers);
+    // ESP_LOGI(TAG, "Setting max_uri_handlers = %d", config.max_uri_handlers);
 
-    ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
+    // ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
         register_http_server_routes(server);
         /* Initialize SSE handlers on the shared server before the catch-all route */

@@ -3,9 +3,10 @@
 #include "string.h"
 #include "esp_log.h"
 
-static void io_log_on_msg(const dispatcher_msg_t *msg) {
+static void io_log_process_msg(const dispatcher_msg_t *msg) {
     if (!msg) return;
     switch (msg->source) {
+        case SOURCE_LINE_SENSOR_WINDOW:
         case SOURCE_LINE_SENSOR:
         case SOURCE_MSC_BUTTON: {
             size_t hex_len = msg->message_len;
@@ -41,7 +42,9 @@ static dispatcher_module_t io_log_mod = {
     .queue_len = 16,
     .stack_size = 4096,
     .task_prio = 9,
-    .on_msg = io_log_on_msg,
+    .process_msg = io_log_process_msg,
+    .step_frame = NULL,
+    .step_ms = 0,
     .queue = NULL
 };
 

@@ -4,7 +4,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include "io_usb_cdc_msc.h"
+#include "io_usb_msc.h"
 #include "esp_log.h"
 #include <errno.h>
 
