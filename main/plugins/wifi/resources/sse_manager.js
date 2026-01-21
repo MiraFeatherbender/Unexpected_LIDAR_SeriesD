@@ -1,11 +1,8 @@
 // Lightweight SSE manager that manages a single EventSource connection
 // and supports subscribe/unsubscribe for named event targets.
 (function(global){
-  const DEFAULT_SSE_PORT = 9090;
   function sseBaseUrl() {
-    const p = window.location.protocol;
-    const h = window.location.hostname;
-    return `${p}//${h}:${DEFAULT_SSE_PORT}/sse`;
+    return `${window.location.origin}/sse`;
   }
 
   function buildUrl(targets) {
@@ -21,14 +18,22 @@
     let reconnectTimer = null;
     let backoffMs = 1000;
     let maxBackoff = 30000;
+    let connectRequested = false;
+    let statusListeners = [];
+
+    function emitStatus(state) {
+      statusListeners.forEach(fn => { try { fn(state); } catch(e){ console.error(e); } });
+    }
 
     function onOpen() {
       backoffMs = 1000;
       console.info('SSE connected');
+      emitStatus('open');
     }
     function onError(e) {
       console.warn('SSE error, will reconnect', e);
-      tryReconnect();
+      emitStatus('error');
+      if (connectRequested) tryReconnect();
     }
 
     function attachListeners() {
@@ -54,36 +59,56 @@
       es.onerror = onError;
     }
 
-    function connect() {
+    function doConnect() {
       if (es) {
         try { es.close(); } catch(e){}
         es = null;
       }
       const url = buildUrl(targets);
+      emitStatus('connecting');
       try {
         es = new EventSource(url);
         attachListeners();
       } catch(e) {
         console.warn('Failed to create EventSource', e);
-        tryReconnect();
+        if (connectRequested) tryReconnect();
       }
     }
 
     function tryReconnect() {
+      if (!connectRequested) return;
       if (reconnectTimer) return;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         backoffMs = Math.min(maxBackoff, backoffMs * 2);
-        connect();
+        doConnect();
       }, backoffMs);
+    }
+
+    function connect() {
+      connectRequested = true;
+      doConnect();
+    }
+
+    function disconnect() {
+      connectRequested = false;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (es) {
+        try { es.close(); } catch(e){}
+        es = null;
+      }
+      emitStatus('closed');
     }
 
     function subscribe(eventName, handler) {
       if (!listeners[eventName]) listeners[eventName] = [];
       listeners[eventName].push(handler);
       targets.add(eventName);
-      // reconnect to apply new target set
-      connect();
+      // reconnect to apply new target set if user requested a connection
+      if (connectRequested) doConnect();
     }
     function unsubscribe(eventName, handler) {
       const arr = listeners[eventName];
@@ -92,7 +117,7 @@
       if (!listeners[eventName] || listeners[eventName].length === 0) {
         delete listeners[eventName];
         targets.delete(eventName);
-        connect();
+        if (connectRequested) doConnect();
       }
     }
 
@@ -101,10 +126,19 @@
       subscribe('message', handler);
     }
 
-    // Start connection immediately
-    connect();
+    function onStatusChange(handler) {
+      statusListeners.push(handler);
+    }
 
-    return { subscribe, unsubscribe, onmessage, _raw: () => es };
+    function isConnected() {
+      return !!(es && es.readyState === 1);
+    }
+
+    function isRequested() {
+      return connectRequested;
+    }
+
+    return { subscribe, unsubscribe, onmessage, connect, disconnect, isConnected, isRequested, onStatusChange, _raw: () => es };
   })();
 
   global.SSEManager = SSEManager;

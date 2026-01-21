@@ -82,6 +82,7 @@
     const pauseBtn = document.getElementById('console-pause-btn');
     const autoCb = document.getElementById('console-autoscroll-cb');
     const dlBtn = document.getElementById('console-download-btn');
+    const sseBtn = document.getElementById('console-sse-btn');
     if (clearBtn) clearBtn.addEventListener('click', clearConsole);
     if (pauseBtn) pauseBtn.addEventListener('click', togglePause);
     if (autoCb) autoCb.addEventListener('change', function(){ autoscroll = autoCb.checked; });
@@ -92,6 +93,30 @@
       SSEManager.subscribe('console', function(obj) {
         addConsoleLine(obj);
       });
+      if (sseBtn) {
+        const updateSseButton = function(state) {
+          const requested = SSEManager.isRequested && SSEManager.isRequested();
+          if (state === 'connecting') {
+            sseBtn.textContent = 'Connecting...';
+            sseBtn.disabled = true;
+            return;
+          }
+          sseBtn.disabled = false;
+          sseBtn.textContent = requested ? 'Disconnect SSE' : 'Connect SSE';
+        };
+        sseBtn.addEventListener('click', function() {
+          if (SSEManager.isRequested && SSEManager.isRequested()) {
+            SSEManager.disconnect();
+          } else {
+            SSEManager.connect();
+          }
+          updateSseButton();
+        });
+        if (SSEManager.onStatusChange) {
+          SSEManager.onStatusChange(updateSseButton);
+        }
+        updateSseButton();
+      }
     }
 
     // Example: show that widget was initialized

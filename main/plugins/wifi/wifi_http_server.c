@@ -71,6 +71,8 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath, const char *
         return ESP_FAIL;
     }
     httpd_resp_set_type(req, content_type ? content_type : get_mime_type(filepath));
+    /* Avoid holding sockets open for static assets */
+    httpd_resp_set_hdr(req, "Connection", "close");
     int total_bytes = 0;
     while (1) {
         int bytes = fread(file_op_buf, 1, sizeof(file_op_buf), f);
@@ -402,7 +404,6 @@ static const http_server_route_t http_server_routes[] = {
     { "/upload/*", HTTP_POST, upload_post_handler, NULL },
     #include "rest_endpoints.def"
 #undef X_REST_ENDPOINT
-    { "/*", HTTP_GET, file_get_handler, NULL }, // catch-all static file handler
 };
 
 static esp_err_t register_http_server_routes(httpd_handle_t server) {
@@ -428,20 +429,38 @@ void wifi_http_server_start(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192; // or 4096, depending on your needs
     config.server_port = 80;
+    /* Dedicated control port for the shared server (keep SSE ctrl port reserved) */
+    config.ctrl_port = 32769;
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
+    config.lru_purge_enable = true;
+#ifdef HTTPD_MAX_OPEN_SOCKETS
+    config.max_open_sockets = 16;
+#endif
 
     // Ensure the httpd instance has enough slots for all routes we plan to register
     size_t route_count = sizeof(http_server_routes) / sizeof(http_server_routes[0]);
-    config.max_uri_handlers = (int)route_count;
-    ESP_LOGI(TAG, "Setting max_uri_handlers = %d", (int)route_count);
+    /* +2 for SSE handlers, +1 for catch-all route registered after SSE */
+    config.max_uri_handlers = (int)route_count + 3;
+    ESP_LOGI(TAG, "Setting max_uri_handlers = %d", config.max_uri_handlers);
 
     ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
         register_http_server_routes(server);
-        /* Initialize SSE broker (separate httpd instance on its own port) */
-        esp_err_t rc = wifi_sse_init();
+        /* Initialize SSE handlers on the shared server before the catch-all route */
+        esp_err_t rc = wifi_sse_init(server);
         if (rc != ESP_OK) {
             ESP_LOGW(TAG, "SSE broker failed to start (rc=%d); continuing without SSE", rc);
+        }
+        /* Register catch-all static file handler last to avoid masking specific routes */
+        httpd_uri_t catch_all = {
+            .uri = "/*",
+            .method = HTTP_GET,
+            .handler = file_get_handler,
+            .user_ctx = NULL,
+        };
+        esp_err_t ce = httpd_register_uri_handler(server, &catch_all);
+        if (ce != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to register catch-all URI handler");
         }
     } else {
         ESP_LOGE(TAG, "Failed to start HTTP server");

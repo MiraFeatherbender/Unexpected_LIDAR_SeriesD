@@ -14,8 +14,6 @@
 #include <stdio.h>
 
 static const char *TAG = "wifi_sse";
-
-#define WIFI_SSE_PORT 9090
 #define SSE_KEEPALIVE_MS 5000
 
 typedef struct sse_client {
@@ -26,7 +24,8 @@ typedef struct sse_client {
 
 static httpd_handle_t sse_server = NULL;
 static sse_client_t *clients = NULL;
-static portMUX_TYPE clients_lock = portMUX_INITIALIZER_UNLOCKED;
+static SemaphoreHandle_t clients_mutex = NULL;
+static TaskHandle_t keepalive_task = NULL;
 
 /* Map dispatch_target_t to a short event name (switch/case, enums used directly) */
 static const char *target_to_event_name(dispatch_target_t t) {
@@ -79,7 +78,11 @@ void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload) {
     if (!json) return;
     uint64_t bit = mask_for_target(target);
 
-    portENTER_CRITICAL(&clients_lock);
+    if (!clients_mutex) {
+        cJSON_free(json);
+        return;
+    }
+    xSemaphoreTake(clients_mutex, portMAX_DELAY);
     sse_client_t **prev = &clients;
     while (*prev) {
         sse_client_t *c = *prev;
@@ -94,13 +97,14 @@ void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload) {
                 ESP_LOGW(TAG, "SSE client write failed, dropping client");
                 *prev = c->next;
                 httpd_resp_send_chunk(c->req, NULL, 0);
+                httpd_req_async_handler_complete(c->req);
                 free(c);
                 continue; // prev unchanged
             }
         }
         prev = &(*prev)->next;
     }
-    portEXIT_CRITICAL(&clients_lock);
+    xSemaphoreGive(clients_mutex);
     cJSON_free(json);
 }
 
@@ -134,6 +138,7 @@ static void remove_client_locked(sse_client_t **prev_next) {
     if (!c) return;
     *prev_next = c->next;
     httpd_resp_send_chunk(c->req, NULL, 0);
+    httpd_req_async_handler_complete(c->req);
     free(c);
 }
 
@@ -162,43 +167,38 @@ esp_err_t wifi_sse_event_source_handler(httpd_req_t *req) {
         mask = mask_for_target(TARGET_SSE);
     }
 
-    httpd_resp_set_type(req, "text/event-stream");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_req_t *async_req = NULL;
+    esp_err_t async_rc = httpd_req_async_handler_begin(req, &async_req);
+    if (async_rc != ESP_OK || !async_req) {
+        ESP_LOGE(TAG, "Failed to begin async SSE handler");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(async_req, "text/event-stream");
+    httpd_resp_set_hdr(async_req, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(async_req, "Connection", "keep-alive");
 
     sse_client_t *c = calloc(1, sizeof(*c));
-    if (!c) return ESP_FAIL;
-    c->req = req;
+    if (!c) {
+        httpd_req_async_handler_complete(async_req);
+        return ESP_FAIL;
+    }
+    c->req = async_req;
     c->mask = mask;
     c->next = NULL;
 
-    portENTER_CRITICAL(&clients_lock);
+    if (!clients_mutex) {
+        httpd_req_async_handler_complete(async_req);
+        free(c);
+        return ESP_FAIL;
+    }
+    xSemaphoreTake(clients_mutex, portMAX_DELAY);
     c->next = clients;
     clients = c;
-    portEXIT_CRITICAL(&clients_lock);
+    xSemaphoreGive(clients_mutex);
 
     ESP_LOGI(TAG, "SSE client connected (mask=0x%016llx)", (unsigned long long)mask);
 
-    const TickType_t keep_ticks = pdMS_TO_TICKS(SSE_KEEPALIVE_MS);
-    while (1) {
-        vTaskDelay(keep_ticks);
-        esp_err_t r = httpd_resp_send_chunk(req, ": keepalive\n\n", strlen(": keepalive\n\n"));
-        if (r != ESP_OK) {
-            /* remove client */
-            portENTER_CRITICAL(&clients_lock);
-            sse_client_t **walk = &clients;
-            while (*walk) {
-                if (*walk == c) {
-                    remove_client_locked(walk);
-                    break;
-                }
-                walk = &(*walk)->next;
-            }
-            portEXIT_CRITICAL(&clients_lock);
-            ESP_LOGI(TAG, "SSE client disconnected");
-            return ESP_OK;
-        }
-    }
     return ESP_OK;
 }
 
@@ -246,45 +246,45 @@ esp_err_t wifi_sse_push_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-static void wifi_sse_start_task(void *arg) {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = WIFI_SSE_PORT;
-    /* pick a different control port to avoid colliding with the main httpd instance */
-    /* default ctrl port is 32768; choose next port so multiple instances can coexist */
-    config.ctrl_port = 32769;
-    ESP_LOGI(TAG, "SSE httpd ctrl_port=%d", config.ctrl_port);
+static void wifi_sse_keepalive_task(void *arg) {
+    const TickType_t keep_ticks = pdMS_TO_TICKS(SSE_KEEPALIVE_MS);
+    while (1) {
+        vTaskDelay(keep_ticks);
+        if (!clients_mutex) continue;
+        xSemaphoreTake(clients_mutex, portMAX_DELAY);
+        sse_client_t **walk = &clients;
+        while (*walk) {
+            sse_client_t *c = *walk;
+            esp_err_t r = httpd_resp_send_chunk(c->req, ": keepalive\n\n", strlen(": keepalive\n\n"));
+            if (r != ESP_OK) {
+                ESP_LOGI(TAG, "SSE client disconnected");
+                remove_client_locked(walk);
+                continue;
+            }
+            walk = &(*walk)->next;
+        }
+        xSemaphoreGive(clients_mutex);
+    }
+}
 
-    /* reduce resource usage for separate instance */
-    config.stack_size = 3072;
-    config.max_uri_handlers = 4;
-#ifdef HTTPD_MAX_OPEN_SOCKETS
-    config.max_open_sockets = 2;
-#endif
-    config.uri_match_fn = httpd_uri_match_wildcard;
-
-    UBaseType_t stack_hwm = uxTaskGetStackHighWaterMark(NULL);
-    const char *tname = pcTaskGetName(NULL);
-    ESP_LOGI(TAG, "Attempting to start SSE server on port %d (free heap: %u bytes, task='%s', stack_hwm=%u)", WIFI_SSE_PORT, (unsigned)esp_get_free_heap_size(), tname ? tname : "", (unsigned)stack_hwm);
-    esp_err_t rc = httpd_start(&sse_server, &config);
-    if (rc != ESP_OK) {
-        UBaseType_t stack_hwm2 = uxTaskGetStackHighWaterMark(NULL);
-        ESP_LOGW(TAG, "Initial SSE server start failed: %s (%d). Free heap: %u bytes. task='%s' stack_hwm=%u. Retrying with minimal config.", esp_err_to_name(rc), rc, (unsigned)esp_get_free_heap_size(), tname ? tname : "", (unsigned)stack_hwm2);
-        /* Retry with even smaller footprint */
-        config.stack_size = 2048;
-        config.max_uri_handlers = 2;
-#ifdef HTTPD_MAX_OPEN_SOCKETS
-        config.max_open_sockets = 1;
-#endif
-        vTaskDelay(pdMS_TO_TICKS(100));
-        UBaseType_t stack_hwm3 = uxTaskGetStackHighWaterMark(NULL);
-        ESP_LOGI(TAG, "Retrying SSE server start (free heap: %u bytes, task='%s', stack_hwm=%u)", (unsigned)esp_get_free_heap_size(), tname ? tname : "", (unsigned)stack_hwm3);
-        rc = httpd_start(&sse_server, &config);
-        if (rc != ESP_OK) {
-            UBaseType_t stack_hwm4 = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGE(TAG, "SSE server failed to start after retry: %s (%d). Free heap: %u bytes. task='%s' stack_hwm=%u.", esp_err_to_name(rc), rc, (unsigned)esp_get_free_heap_size(), tname ? tname : "", (unsigned)stack_hwm4);
+esp_err_t wifi_sse_init(httpd_handle_t server) {
+    if (!server) return ESP_ERR_INVALID_ARG;
+    if (sse_server) return ESP_OK;
+    sse_server = server;
+    if (!clients_mutex) {
+        clients_mutex = xSemaphoreCreateMutex();
+        if (!clients_mutex) {
             sse_server = NULL;
-            vTaskDelete(NULL);
-            return;
+            return ESP_FAIL;
+        }
+    }
+
+    if (!keepalive_task) {
+        BaseType_t ok = xTaskCreate(wifi_sse_keepalive_task, "wifi_sse_keepalive", 3072, NULL, tskIDLE_PRIORITY+1, &keepalive_task);
+        if (ok != pdTRUE) {
+            keepalive_task = NULL;
+            sse_server = NULL;
+            return ESP_FAIL;
         }
     }
 
@@ -294,7 +294,12 @@ static void wifi_sse_start_task(void *arg) {
         .handler = wifi_sse_event_source_handler,
         .user_ctx = NULL
     };
-    httpd_register_uri_handler(sse_server, &uri);
+    esp_err_t err = httpd_register_uri_handler(sse_server, &uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register SSE URI handler");
+        sse_server = NULL;
+        return err;
+    }
 
     httpd_uri_t push_uri = {
         .uri = "/api/sse/push",
@@ -302,41 +307,40 @@ static void wifi_sse_start_task(void *arg) {
         .handler = wifi_sse_push_handler,
         .user_ctx = NULL
     };
-    httpd_register_uri_handler(sse_server, &push_uri);
+    err = httpd_register_uri_handler(sse_server, &push_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register SSE push URI handler");
+        sse_server = NULL;
+        return err;
+    }
 
     /* Register dispatcher handlers for SSE targets */
     dispatcher_register_handler(TARGET_SSE_CONSOLE, wifi_sse_dispatch_handler);
     dispatcher_register_handler(TARGET_SSE_LINE_SENSOR, wifi_sse_dispatch_handler);
     dispatcher_register_handler(TARGET_SSE, wifi_sse_dispatch_handler);
 
-    ESP_LOGI(TAG, "SSE server started on port %d", WIFI_SSE_PORT);
-    vTaskDelete(NULL);
-}
-
-esp_err_t wifi_sse_init(void) {
-    if (sse_server) return ESP_OK;
-    BaseType_t ok = xTaskCreate(wifi_sse_start_task, "wifi_sse_start", 8192, NULL, tskIDLE_PRIORITY+1, NULL);
-    if (ok != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to create SSE start task");
-        return ESP_FAIL;
-    }
+    ESP_LOGI(TAG, "SSE handlers registered on shared HTTP server");
     return ESP_OK;
 }
 
 esp_err_t wifi_sse_deinit(void) {
-    if (sse_server) {
-        httpd_stop(sse_server);
-        sse_server = NULL;
+    sse_server = NULL;
+    if (keepalive_task) {
+        vTaskDelete(keepalive_task);
+        keepalive_task = NULL;
     }
-    portENTER_CRITICAL(&clients_lock);
-    sse_client_t *c = clients;
-    while (c) {
-        sse_client_t *n = c->next;
-        httpd_resp_send_chunk(c->req, NULL, 0);
-        free(c);
-        c = n;
+    if (clients_mutex) {
+        xSemaphoreTake(clients_mutex, portMAX_DELAY);
+        sse_client_t *c = clients;
+        while (c) {
+            sse_client_t *n = c->next;
+            httpd_resp_send_chunk(c->req, NULL, 0);
+            httpd_req_async_handler_complete(c->req);
+            free(c);
+            c = n;
+        }
+        clients = NULL;
+        xSemaphoreGive(clients_mutex);
     }
-    clients = NULL;
-    portEXIT_CRITICAL(&clients_lock);
     return ESP_OK;
 }

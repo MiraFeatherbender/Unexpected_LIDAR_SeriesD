@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-esp_err_t wifi_sse_init(void);
+esp_err_t wifi_sse_init(httpd_handle_t server);
 esp_err_t wifi_sse_deinit(void);
 void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload);
 

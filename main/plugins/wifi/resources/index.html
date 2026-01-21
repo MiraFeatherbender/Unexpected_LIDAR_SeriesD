@@ -115,7 +115,6 @@
             #hsv-preview-canvas, #ledSim, #blend-canvas { width: var(--canvas-small-size) !important; height: var(--canvas-small-size) !important; }
         }
     </style>
-    <link rel="stylesheet" href="console.css">
     <!-- All JS libraries loaded in head, before any inline scripts -->
     <script src="iro.min.js"></script>
     <script src="rgb_ui.js"></script>
@@ -124,6 +123,7 @@
     <script src="curve_widget.js"></script>
     <script src="hsv_curve_editor.js"></script>
     <script src="rgbAnimationsEditor.js"></script>
+    <link rel="stylesheet" href="console.css">
 </head>
 <body>
     <h1>AnkleBiter Dashboard</h1>
@@ -157,6 +157,7 @@
                     <h2 style="margin-top:0; margin-bottom:0.6em; color:#eee; font-size:1.05em;">Console</h2>
                     <div id="console-output" class="console-output" aria-label="Event console"></div>
                     <div class="console-controls">
+                        <button id="console-sse-btn" class="btn btn--compact">Connect SSE</button>
                         <button id="console-clear-btn" class="btn btn--compact">Clear</button>
                         <button id="console-pause-btn" class="btn btn--compact">Pause</button>
                         <label style="display:flex; align-items:center; gap:6px; color:#ccc;">
