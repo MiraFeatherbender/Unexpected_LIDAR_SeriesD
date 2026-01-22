@@ -8,6 +8,9 @@
 #include "tinyusb_msc.h"
 #include "dispatcher.h"
 #include "dispatcher_module.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 
 #define BASE_PATH "/data"
 
@@ -40,6 +43,18 @@ static dispatcher_module_t io_usb_msc_mod = {
     .queue = NULL,
     .next_step = 0
 };
+
+static QueueHandle_t io_usb_msc_ptr_queue = NULL;
+
+static void io_usb_msc_ptr_task(void *arg) {
+    (void)arg;
+    while (1) {
+        pool_msg_t *pmsg = NULL;
+        if (xQueueReceive(io_usb_msc_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
+            dispatcher_module_process_ptr_compat(&io_usb_msc_mod, pmsg);
+        }
+    }
+}
 
 
 
@@ -159,6 +174,14 @@ void io_usb_msc_init(void)
 
     // MSC dispatcher queue and handler
     dispatcher_module_start(&io_usb_msc_mod, io_usb_msc_dispatcher_handler);
+
+    io_usb_msc_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_USB_MSC, io_usb_msc_mod.queue_len);
+    if (!io_usb_msc_ptr_queue) {
+        ESP_LOGE(TAG, "Failed to create pointer queue for io_usb_msc");
+        return;
+    }
+
+    xTaskCreate(io_usb_msc_ptr_task, "io_usb_msc_ptr_task", io_usb_msc_mod.stack_size, NULL, io_usb_msc_mod.task_prio, NULL);
 
 #define ENABLE_USB_MSC_INIT 0
 #if ENABLE_USB_MSC_INIT

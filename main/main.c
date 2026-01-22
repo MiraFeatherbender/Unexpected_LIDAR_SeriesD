@@ -13,9 +13,12 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_log.h"
 
 #include "plugins/io_wifi_ap.h"
 #include "plugins/dispatcher_allocator.h"
+#include "dispatcher_pool.h"
+#include "plugins/dispatcher_pool_test.h"
 
 
 
@@ -28,9 +31,34 @@ void app_main(void)
     ums3_set_antenna_external(CONFIG_UM_ANTENNA_EXTERNAL);
 #endif
 
+    esp_log_level_set("wifi", ESP_LOG_WARN);
+    esp_log_level_set("wifi_init", ESP_LOG_WARN);
+    esp_log_level_set("uart", ESP_LOG_WARN);
+    esp_log_level_set("phy_init", ESP_LOG_WARN);
+    esp_log_level_set("boot", ESP_LOG_WARN);
+    esp_log_level_set("esp_image", ESP_LOG_WARN);
+    esp_log_level_set("esp_psram", ESP_LOG_WARN);
+    esp_log_level_set("cpu_start", ESP_LOG_WARN);
+    esp_log_level_set("app_init", ESP_LOG_WARN);
+    esp_log_level_set("efuse_init", ESP_LOG_WARN);
+    esp_log_level_set("heap_init", ESP_LOG_WARN);
+    esp_log_level_set("esp_psram", ESP_LOG_WARN);
+    esp_log_level_set("spi_flash", ESP_LOG_WARN);
+    esp_log_level_set("sleep_gpio", ESP_LOG_WARN);
+    esp_log_level_set("main_task", ESP_LOG_WARN);
+    esp_log_level_set("esp_psram", ESP_LOG_WARN);
+    esp_log_level_set("usb_msc", ESP_LOG_WARN);
+    esp_log_level_set("pp", ESP_LOG_WARN);
+    esp_log_level_set("net80211", ESP_LOG_WARN);
+    esp_log_level_set("mdns_mem", ESP_LOG_WARN);
+
+
     io_usb_msc_init();
-    /* Load dispatcher allocator config (if present on FAT) */
     dispatcher_allocator_init();
+    dispatcher_pool_init();
+#ifdef CONFIG_DISPATCHER_POOL_TEST
+    dispatcher_pool_test_init();
+#endif
     dispatcher_init();
     io_log_init();
     io_gpio_init();

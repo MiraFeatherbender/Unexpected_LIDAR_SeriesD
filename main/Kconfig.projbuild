@@ -151,3 +151,11 @@ menu "Wi-Fi Station (STA) Settings"
         string "Wi-Fi STA Password"
         default "YourPassword"
 endmenu
+
+menu "Dispatcher Pool Test"
+    config DISPATCHER_POOL_TEST
+        bool "Enable dispatcher pool test module"
+        default n
+        help
+            Enables a test module that sends/receives pointer messages using dispatcher_pool.
+endmenu

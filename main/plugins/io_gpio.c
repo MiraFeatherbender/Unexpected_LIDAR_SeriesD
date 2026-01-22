@@ -1,4 +1,5 @@
 #include "dispatcher.h"
+#include "dispatcher_pool.h"
 #include "io_gpio.h"
 #include "soc/gpio_reg.h"
 #include "driver/gpio.h"
@@ -6,6 +7,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "esp_log.h"
+
+static const char *TAG = "io_gpio";
 
 static QueueHandle_t gpio_event_queue = NULL;
 
@@ -208,14 +212,47 @@ void io_gpio_event_task(void *arg) {
                 last_line_state = msg.state;
                 last_line_state_valid = true;
             }
-            dispatcher_msg_t dmsg = {
-                .source = msg.source_id,
-                .message_len = 1,
-                .data = { msg.state },
-                .context = NULL
-            };
-            memcpy(dmsg.targets, msg.target_id, sizeof(dmsg.targets));
-            dispatcher_send(&dmsg);
+            dispatch_target_t ptr_targets[TARGET_MAX];
+            dispatch_target_t val_targets[TARGET_MAX];
+            dispatcher_fill_targets(ptr_targets);
+            dispatcher_fill_targets(val_targets);
+
+            size_t ptr_idx = 0;
+            size_t val_idx = 0;
+            for (size_t i = 0; i < TARGET_MAX; ++i) {
+                dispatch_target_t t = msg.target_id[i];
+                if (t == TARGET_MAX) continue;
+                if (dispatcher_has_ptr_queue(t)) {
+                    if (ptr_idx < TARGET_MAX) ptr_targets[ptr_idx++] = t;
+                } else {
+                    if (val_idx < TARGET_MAX) val_targets[val_idx++] = t;
+                }
+            }
+
+            if (ptr_idx > 0) {
+                dispatcher_pool_type_t pool_type = (msg.source_id == SOURCE_MSC_BUTTON)
+                    ? DISPATCHER_POOL_CONTROL
+                    : DISPATCHER_POOL_STREAMING;
+                if (!dispatcher_pool_send_ptr(pool_type,
+                                              msg.source_id,
+                                              ptr_targets,
+                                              &msg.state,
+                                              1,
+                                              NULL)) {
+                    ESP_LOGW(TAG, "Pool send failed for source %d", msg.source_id);
+                }
+            }
+
+            if (val_idx > 0) {
+                dispatcher_msg_t dmsg = {
+                    .source = msg.source_id,
+                    .message_len = 1,
+                    .data = { msg.state },
+                    .context = NULL
+                };
+                memcpy(dmsg.targets, val_targets, sizeof(dmsg.targets));
+                dispatcher_send(&dmsg);
+            }
         }
     }
 }

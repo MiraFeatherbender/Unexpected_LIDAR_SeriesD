@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #define BUF_SIZE (1024)
 
@@ -44,6 +45,8 @@ typedef struct {
     void *context; // optional context pointer
 } dispatcher_msg_t;
 
+typedef struct pool_msg_s pool_msg_t;
+
 // Helper: fill target array with sentinel
 static inline void dispatcher_fill_targets_impl(dispatch_target_t *targets, size_t count) {
     for (size_t i = 0; i < count; ++i) {
@@ -62,5 +65,9 @@ void dispatcher_send_from_isr(const dispatcher_msg_t *msg,
                               BaseType_t *hp_task_woken);
 void dispatcher_register_handler(dispatch_target_t target,
                                  dispatcher_handler_t handler);
+
+void dispatcher_register_ptr_queue(dispatch_target_t target, QueueHandle_t queue);
+int dispatcher_broadcast_ptr(pool_msg_t *msg, const dispatch_target_t *targets);
+bool dispatcher_has_ptr_queue(dispatch_target_t target);
 
 #endif // DISPATCHER_H

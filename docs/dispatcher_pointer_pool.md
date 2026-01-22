@@ -10,6 +10,7 @@ A PSRAM-backed pool of refcounted dispatcher message objects (pointer messages) 
 - Avoid frequent malloc/free overheads by preallocating pool entries in PSRAM.
 - Provide two delivery modes: best-effort non-blocking for high-volume streaming, and blocking/backpressure for control messages.
 - Keep backward compatibility: modules opt-in to pointer-queue model; existing value-queue behavior remains supported.
+- Compatibility goal: add a helper in `dispatcher_module.h` so modules can keep `process_msg(const dispatcher_msg_t *)` while queues store pointer messages; helper will unwrap the pointer and enforce payload lifetime rules.
 
 Requirements
 - Must support existing `dispatcher_msg_t` semantics (source, targets[], data[], message_len, context) while enforcing read-only rules for shared payloads.

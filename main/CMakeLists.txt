@@ -7,6 +7,7 @@ idf_component_register(
     SRCS
         "main.c"
         "dispatcher.c"
+        "dispatcher_pool.c"
 
         # Core plugin sources
         "plugins/io_gpio.c"
@@ -37,6 +38,7 @@ idf_component_register(
         # Modules
         "plugins/mod_line_sensor_window.c"
         "plugins/dispatcher_allocator.c"
+        "plugins/dispatcher_pool_test.c"
 
     REQUIRES
         esp_wifi
