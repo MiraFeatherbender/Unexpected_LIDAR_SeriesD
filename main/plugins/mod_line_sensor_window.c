@@ -42,6 +42,7 @@ static void line_sensor_window_process_msg(const dispatcher_msg_t *msg) {
     out.source = SOURCE_LINE_SENSOR_WINDOW;
     dispatcher_fill_targets(out.targets);
     out.targets[0] = TARGET_SSE_LINE_SENSOR;
+
     line_sensor_window_snapshot(out.data, &out.message_len);
     dispatcher_send(&out);
 }

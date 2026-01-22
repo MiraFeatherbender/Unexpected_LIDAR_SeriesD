@@ -36,6 +36,7 @@ idf_component_register(
 
         # Modules
         "plugins/mod_line_sensor_window.c"
+        "plugins/dispatcher_allocator.c"
 
     REQUIRES
         esp_wifi

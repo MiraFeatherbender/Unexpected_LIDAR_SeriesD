@@ -1,0 +1,18 @@
+{
+  "pools": {
+    "streaming": {
+      "F": 0.25,
+      "C": 2,
+      "payload_size": 64,
+      "min_entries": 8,
+      "max_entries": 512
+    },
+    "control": {
+      "F": 0.10,
+      "C": 1,
+      "payload_size": 256,
+      "min_entries": 4,
+      "max_entries": 64
+    }
+  }
+}

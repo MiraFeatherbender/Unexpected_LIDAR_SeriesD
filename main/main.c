@@ -15,6 +15,7 @@
 #include "freertos/task.h"
 
 #include "plugins/io_wifi_ap.h"
+#include "plugins/dispatcher_allocator.h"
 
 
 
@@ -26,15 +27,19 @@ void app_main(void)
 #ifdef CONFIG_UM_ANTENNA_EXTERNAL
     ums3_set_antenna_external(CONFIG_UM_ANTENNA_EXTERNAL);
 #endif
+
+    io_usb_msc_init();
+    /* Load dispatcher allocator config (if present on FAT) */
+    dispatcher_allocator_init();
     dispatcher_init();
     io_log_init();
-    io_usb_msc_init();
     io_gpio_init();
     mod_line_sensor_window_init();
     io_lidar_init();
     lidar_coordinator_init();
     io_wifi_ap_init();
     io_battery_init();
+
     rgb_anim_init_all();
     io_rgb_init();
 

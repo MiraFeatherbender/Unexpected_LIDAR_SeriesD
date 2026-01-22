@@ -21,7 +21,7 @@ static void io_log_process_msg(const dispatcher_msg_t *msg) {
                 hexbuf[off - 1] = '\0'; // trim trailing space
             }
             ESP_LOGI("io_log", "Log message from source %d (hex): %s", msg->source, hexbuf);
-            break;
+            break; 
         }
         default:
             // null-terminate message data for safety

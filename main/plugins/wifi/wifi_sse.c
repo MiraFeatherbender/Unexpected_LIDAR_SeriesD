@@ -202,7 +202,8 @@ void wifi_sse_dispatch_handler(const dispatcher_msg_t *msg) {
     }
 
     cJSON_Delete(root);
-}
+} 
+
 
 /* Utility to remove a client; assumes clients_lock held and prev points to previous->next */
 static void remove_client_locked(sse_client_t **prev_next) {
