@@ -23,6 +23,7 @@ static const char *TAG = "wifi_sse";
 #define SSE_HEXBUF_LEN (32 * 3 + 1)
 #define SSE_B64BUF_LEN (((32 + 2) / 3 * 4) + 1)
 #define SSE_JSONBUF_LEN 1024
+#define SSE_JSON_RING_COUNT 4
 
 typedef struct sse_client {
     httpd_req_t *req;
@@ -35,6 +36,9 @@ static sse_client_t *clients = NULL;
 static SemaphoreHandle_t clients_mutex = NULL;
 static TaskHandle_t keepalive_task = NULL;
 static QueueHandle_t sse_ptr_queue = NULL;
+static SemaphoreHandle_t sse_json_mutex = NULL;
+static char *sse_json_ring[SSE_JSON_RING_COUNT] = {0};
+static size_t sse_json_ring_idx = 0;
 
 static void *sse_alloc_psram(size_t size) {
     void *p = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -44,6 +48,26 @@ static void *sse_alloc_psram(size_t size) {
 
 static void sse_free(void *p) {
     if (p) free(p);
+}
+
+static void sse_json_ring_init(void) {
+    if (sse_json_mutex) return;
+    sse_json_mutex = xSemaphoreCreateMutex();
+    for (size_t i = 0; i < SSE_JSON_RING_COUNT; ++i) {
+        sse_json_ring[i] = (char *)heap_caps_malloc(SSE_JSONBUF_LEN, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!sse_json_ring[i]) {
+            sse_json_ring[i] = (char *)malloc(SSE_JSONBUF_LEN);
+        }
+    }
+}
+
+static char *sse_json_ring_next(void) {
+    if (!sse_json_mutex) return NULL;
+    xSemaphoreTake(sse_json_mutex, portMAX_DELAY);
+    char *buf = sse_json_ring[sse_json_ring_idx % SSE_JSON_RING_COUNT];
+    sse_json_ring_idx = (sse_json_ring_idx + 1) % SSE_JSON_RING_COUNT;
+    xSemaphoreGive(sse_json_mutex);
+    return buf;
 }
 
 /* Map dispatch_target_t to a short event name (switch/case, enums used directly) */
@@ -212,14 +236,13 @@ void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload) {
     const char *ename = target_to_event_name(target);
     if (!ename) return;
 
-    char *json_buf = (char *)sse_alloc_psram(SSE_JSONBUF_LEN);
+    char *json_buf = sse_json_ring_next();
     char *json = NULL;
     bool used_prealloc = false;
     if (json_buf && cJSON_PrintPreallocated(payload, json_buf, SSE_JSONBUF_LEN, false)) {
         json = json_buf;
         used_prealloc = true;
     } else {
-        if (json_buf) sse_free(json_buf);
         json = cJSON_PrintUnformatted(payload);
     }
     if (!json) return;
@@ -252,9 +275,7 @@ void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload) {
         prev = &(*prev)->next;
     }
     xSemaphoreGive(clients_mutex);
-    if (used_prealloc) {
-        sse_free(json);
-    } else {
+    if (!used_prealloc) {
         cJSON_free(json);
     }
 }
@@ -404,6 +425,7 @@ esp_err_t wifi_sse_init(httpd_handle_t server) {
     if (!server) return ESP_ERR_INVALID_ARG;
     if (sse_server) return ESP_OK;
     sse_server = server;
+    sse_json_ring_init();
     if (!clients_mutex) {
         clients_mutex = xSemaphoreCreateMutex();
         if (!clients_mutex) {
@@ -467,6 +489,18 @@ esp_err_t wifi_sse_deinit(void) {
     if (sse_ptr_queue) {
         vQueueDelete(sse_ptr_queue);
         sse_ptr_queue = NULL;
+    }
+    if (sse_json_mutex) {
+        xSemaphoreTake(sse_json_mutex, portMAX_DELAY);
+        for (size_t i = 0; i < SSE_JSON_RING_COUNT; ++i) {
+            if (sse_json_ring[i]) {
+                free(sse_json_ring[i]);
+                sse_json_ring[i] = NULL;
+            }
+        }
+        xSemaphoreGive(sse_json_mutex);
+        vSemaphoreDelete(sse_json_mutex);
+        sse_json_mutex = NULL;
     }
     if (keepalive_task) {
         vTaskDelete(keepalive_task);
