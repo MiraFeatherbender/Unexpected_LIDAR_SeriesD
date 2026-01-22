@@ -71,10 +71,6 @@ static dispatcher_module_t line_sensor_window_mod = {
     .queue = NULL
 };
 
-static void line_sensor_window_dispatcher_handler(const dispatcher_msg_t *msg) {
-    dispatcher_module_enqueue(&line_sensor_window_mod, msg);
-}
-
 static QueueHandle_t line_sensor_window_ptr_queue = NULL;
 
 static void line_sensor_window_ptr_task(void *arg) {
@@ -88,8 +84,6 @@ static void line_sensor_window_ptr_task(void *arg) {
 }
 
 void mod_line_sensor_window_init(void) {
-    dispatcher_module_start(&line_sensor_window_mod, line_sensor_window_dispatcher_handler);
-
     line_sensor_window_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_LINE_SENSOR_WINDOW, line_sensor_window_mod.queue_len);
     if (!line_sensor_window_ptr_queue) {
         ESP_LOGE(TAG, "Failed to create pointer queue for line_sensor_window");

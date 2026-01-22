@@ -72,10 +72,6 @@ static esp_err_t storage_init_spiflash(wl_handle_t *wl_handle)
 }
 
 
-static void io_usb_msc_dispatcher_handler(const dispatcher_msg_t *msg)
-{
-    dispatcher_module_enqueue(&io_usb_msc_mod, msg);
-}
 static void msc_event_cb(tinyusb_msc_storage_handle_t handle, tinyusb_msc_event_t *event, void *arg) {
     if (!event || event->id != TINYUSB_MSC_EVENT_MOUNT_COMPLETE) return;
     switch (event->mount_point) {
@@ -159,8 +155,6 @@ void io_usb_msc_init(void)
     io_usb_msc_disable();
 
     // MSC dispatcher queue and handler
-    dispatcher_module_start(&io_usb_msc_mod, io_usb_msc_dispatcher_handler);
-
     io_usb_msc_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_USB_MSC, io_usb_msc_mod.queue_len);
     if (!io_usb_msc_ptr_queue) {
         ESP_LOGE(TAG, "Failed to create pointer queue for io_usb_msc");

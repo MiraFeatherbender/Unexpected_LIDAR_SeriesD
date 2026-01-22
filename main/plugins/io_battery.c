@@ -21,7 +21,7 @@ static const char *TAG = "io_battery";
 static void battery_process_msg(const dispatcher_msg_t *msg);
 static void battery_step_frame(void);
 
-// Module instance (file-scope) so dispatcher handler can enqueue messages
+// Module instance (file-scope) used by pointer task
 static dispatcher_module_t battery_mod = {
     .name = "io_battery",
     .target = TARGET_BATTERY,
@@ -34,18 +34,38 @@ static dispatcher_module_t battery_mod = {
     .queue = NULL
 };
 
-static void battery_dispatcher_handler(const dispatcher_msg_t *msg) {
-    dispatcher_module_enqueue(&battery_mod, msg);
-}
-
 static QueueHandle_t battery_ptr_queue = NULL;
 
 static void battery_ptr_task(void *arg) {
     (void)arg;
+    dispatcher_module_t *module = &battery_mod;
+    if (!battery_ptr_queue) {
+        ESP_LOGE(TAG, "Pointer queue not initialized for io_battery");
+        vTaskDelete(NULL);
+        return;
+    }
+
     while (1) {
+        TickType_t timeout = portMAX_DELAY;
+        if (module->step_ms > 0) {
+            if (module->next_step == 0) {
+                module->next_step = xTaskGetTickCount() + pdMS_TO_TICKS(module->step_ms);
+            }
+            TickType_t now = xTaskGetTickCount();
+            timeout = (module->next_step > now) ? (module->next_step - now) : 0;
+        }
+
         pool_msg_t *pmsg = NULL;
-        if (xQueueReceive(battery_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
-            dispatcher_module_process_ptr_compat(&battery_mod, pmsg);
+        if (xQueueReceive(battery_ptr_queue, &pmsg, timeout) == pdTRUE) {
+            dispatcher_module_process_ptr_compat(module, pmsg);
+        }
+
+        if (module->step_frame && module->step_ms > 0) {
+            TickType_t now = xTaskGetTickCount();
+            if ((int32_t)(now - module->next_step) >= 0) {
+                module->step_frame();
+                module->next_step = now + pdMS_TO_TICKS(module->step_ms);
+            }
         }
     }
 }
@@ -179,16 +199,14 @@ void io_battery_init(void)
     // Try to load battery tiers from JSON at startup
     battery_json_reload();
 
-    // Start dispatcher module (battery_mod is file-scope)
-    dispatcher_module_start(&battery_mod, battery_dispatcher_handler);
-    ESP_LOGI(TAG, "io_battery module started (stack=%u, queue_len=%u, step_ms=%u)", (unsigned)battery_mod.stack_size, (unsigned)battery_mod.queue_len, (unsigned)battery_mod.step_ms);
-
     battery_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_BATTERY, battery_mod.queue_len);
     if (!battery_ptr_queue) {
         ESP_LOGE(TAG, "Failed to create pointer queue for io_battery");
         return;
     }
+    battery_mod.next_step = 0;
     xTaskCreate(battery_ptr_task, "battery_ptr_task", battery_mod.stack_size, NULL, battery_mod.task_prio, NULL);
+    ESP_LOGI(TAG, "io_battery pointer module started (stack=%u, queue_len=%u, step_ms=%u)", (unsigned)battery_mod.stack_size, (unsigned)battery_mod.queue_len, (unsigned)battery_mod.step_ms);
 }
 
 static void battery_step_frame(void)

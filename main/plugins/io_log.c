@@ -48,10 +48,6 @@ static dispatcher_module_t io_log_mod = {
     .queue = NULL
 };
 
-static void io_log_dispatcher_handler(const dispatcher_msg_t *msg) {
-    dispatcher_module_enqueue(&io_log_mod, msg);
-}
-
 static QueueHandle_t io_log_ptr_queue = NULL;
 
 static void io_log_ptr_task(void *arg) {
@@ -65,8 +61,6 @@ static void io_log_ptr_task(void *arg) {
 }
 
 void io_log_init(void) {
-    dispatcher_module_start(&io_log_mod, io_log_dispatcher_handler);
-
     io_log_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_LOG, io_log_mod.queue_len);
     if (!io_log_ptr_queue) {
         ESP_LOGE("io_log", "Failed to create pointer queue for io_log");

@@ -270,24 +270,12 @@ static esp_err_t dispatch_from_rest(const httpd_req_t *req, void *user_ctx, cons
         return sent > 0 ? ESP_OK : ESP_FAIL;
     }
 
-    dispatcher_msg_t msg = {0};
-    msg.source = SOURCE_REST;
-    msg.targets[0] = target; // user_ctx is (void*)(TARGET_*)
-
-    // If this is a REST GET (context struct), pass via msg.context
+    ESP_LOGW(TAG, "dispatch_from_rest: target %d has no pointer queue; dropping", (int)target);
     if (len == sizeof(rest_json_request_t)) {
-        msg.context = (void*)data;
-        msg.message_len = 0;
-        ESP_LOGI(TAG, "dispatch_from_rest: REST GET, setting msg.context=%p", msg.context);
-    } else {
-        // REST command (POST): copy data into msg.data
-        msg.message_len = len > sizeof(msg.data) ? sizeof(msg.data) : len;
-        memcpy(msg.data, data, msg.message_len);
-        msg.context = NULL;
-        ESP_LOGI(TAG, "dispatch_from_rest: REST COMMAND, copying %d bytes to msg.data", (int)msg.message_len);
+        rest_json_request_t *req_ctx = (rest_json_request_t *)data;
+        if (req_ctx->sem) xSemaphoreGive(req_ctx->sem);
     }
-    dispatcher_send(&msg);
-    return ESP_OK;
+    return ESP_FAIL;
 }
 
 static char *rest_json_buf = NULL;

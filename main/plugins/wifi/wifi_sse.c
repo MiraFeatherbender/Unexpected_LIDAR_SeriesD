@@ -447,11 +447,6 @@ esp_err_t wifi_sse_init(httpd_handle_t server) {
         return err;
     }
 
-    /* Register dispatcher handlers for SSE targets */
-    dispatcher_register_handler(TARGET_SSE_CONSOLE, wifi_sse_dispatch_handler);
-    dispatcher_register_handler(TARGET_SSE_LINE_SENSOR, wifi_sse_dispatch_handler);
-    dispatcher_register_handler(TARGET_SSE, wifi_sse_dispatch_handler);
-
     if (!sse_ptr_queue) {
         sse_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_SSE, SSE_PTR_QUEUE_LEN);
         if (sse_ptr_queue) {

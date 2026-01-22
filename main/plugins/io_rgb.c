@@ -35,16 +35,6 @@ static dispatcher_module_t io_rgb_mod = {
 
 static QueueHandle_t io_rgb_ptr_queue = NULL;
 
-static void io_rgb_ptr_task(void *arg) {
-    (void)arg;
-    while (1) {
-        pool_msg_t *pmsg = NULL;
-        if (xQueueReceive(io_rgb_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
-            dispatcher_module_process_ptr_compat(&io_rgb_mod, pmsg);
-        }
-    }
-}
-
 typedef enum {
     RGB_PLUGIN_TYPE_HSV = 0,
     RGB_PLUGIN_TYPE_RGB = 1,
@@ -197,14 +187,36 @@ void io_rgb_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
 }
 
 // Dispatcher handler — messages routed TO RGB
-static void io_rgb_dispatcher_handler(const dispatcher_msg_t *msg)
-{
-    if (!io_rgb_mod.queue || xQueueSend(io_rgb_mod.queue, msg, 0) != pdTRUE) {
-        // If queue is full and this is a REST GET, signal failure immediately
-        if (msg->source == SOURCE_REST && msg->context) {
-            rest_json_request_t *req = (rest_json_request_t *)msg->context;
-            ESP_LOGW("io_rgb", "Giving semaphore immediately due to queue full (REST GET)");
-            if (req->sem) xSemaphoreGive(req->sem);
+static void io_rgb_ptr_task(void *arg) {
+    (void)arg;
+    dispatcher_module_t *module = &io_rgb_mod;
+    if (!io_rgb_ptr_queue) {
+        ESP_LOGE("io_rgb", "Pointer queue not initialized");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    while (1) {
+        TickType_t timeout = portMAX_DELAY;
+        if (module->step_ms > 0) {
+            if (module->next_step == 0) {
+                module->next_step = xTaskGetTickCount() + pdMS_TO_TICKS(module->step_ms);
+            }
+            TickType_t now = xTaskGetTickCount();
+            timeout = (module->next_step > now) ? (module->next_step - now) : 0;
+        }
+
+        pool_msg_t *pmsg = NULL;
+        if (xQueueReceive(io_rgb_ptr_queue, &pmsg, timeout) == pdTRUE) {
+            dispatcher_module_process_ptr_compat(module, pmsg);
+        }
+
+        if (module->step_frame && module->step_ms > 0) {
+            TickType_t now = xTaskGetTickCount();
+            if ((int32_t)(now - module->next_step) >= 0) {
+                module->step_frame();
+                module->next_step = now + pdMS_TO_TICKS(module->step_ms);
+            }
         }
     }
 }
@@ -215,15 +227,13 @@ void io_rgb_init(void)
     ums3_set_pixel_brightness(anim_brightness);
     ums3_set_pixel_color(0, 0, 0);    
     
-    // Create command queue + register handler + start task
-    dispatcher_module_start(&io_rgb_mod, io_rgb_dispatcher_handler);
-
     io_rgb_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_RGB, io_rgb_mod.queue_len);
     if (!io_rgb_ptr_queue) {
         ESP_LOGE("io_rgb", "Failed to create pointer queue for io_rgb");
         return;
     }
 
+    io_rgb_mod.next_step = 0;
     xTaskCreate(io_rgb_ptr_task, "io_rgb_ptr_task", io_rgb_mod.stack_size, NULL, io_rgb_mod.task_prio, NULL);
 }
 

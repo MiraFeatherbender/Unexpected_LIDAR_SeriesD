@@ -164,9 +164,10 @@ void setup_line_sensor(void) {
         .pins = pins,
         .pin_count = 8,
         .source_id = SOURCE_LINE_SENSOR, // Example source ID
-        .target_id[0] = TARGET_LINE_SENSOR_WINDOW,
     };
     ctx.queue = gpio_event_queue;
+    dispatcher_fill_targets(ctx.target_id);
+    ctx.target_id[0] = TARGET_LINE_SENSOR_WINDOW;
    
     gpio_config_t cfg = {
         .mode = GPIO_MODE_INPUT,
@@ -244,14 +245,7 @@ void io_gpio_event_task(void *arg) {
             }
 
             if (val_idx > 0) {
-                dispatcher_msg_t dmsg = {
-                    .source = msg.source_id,
-                    .message_len = 1,
-                    .data = { msg.state },
-                    .context = NULL
-                };
-                memcpy(dmsg.targets, val_targets, sizeof(dmsg.targets));
-                dispatcher_send(&dmsg);
+                ESP_LOGW(TAG, "Dropping value-path targets for source %d (no pointer queue)", msg.source_id);
             }
         }
     }
