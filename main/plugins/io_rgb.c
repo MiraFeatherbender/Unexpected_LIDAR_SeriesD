@@ -33,6 +33,18 @@ static dispatcher_module_t io_rgb_mod = {
     .next_step = 0
 };
 
+static QueueHandle_t io_rgb_ptr_queue = NULL;
+
+static void io_rgb_ptr_task(void *arg) {
+    (void)arg;
+    while (1) {
+        pool_msg_t *pmsg = NULL;
+        if (xQueueReceive(io_rgb_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
+            dispatcher_module_process_ptr_compat(&io_rgb_mod, pmsg);
+        }
+    }
+}
+
 typedef enum {
     RGB_PLUGIN_TYPE_HSV = 0,
     RGB_PLUGIN_TYPE_RGB = 1,
@@ -205,6 +217,14 @@ void io_rgb_init(void)
     
     // Create command queue + register handler + start task
     dispatcher_module_start(&io_rgb_mod, io_rgb_dispatcher_handler);
+
+    io_rgb_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_RGB, io_rgb_mod.queue_len);
+    if (!io_rgb_ptr_queue) {
+        ESP_LOGE("io_rgb", "Failed to create pointer queue for io_rgb");
+        return;
+    }
+
+    xTaskCreate(io_rgb_ptr_task, "io_rgb_ptr_task", io_rgb_mod.stack_size, NULL, io_rgb_mod.task_prio, NULL);
 }
 
 

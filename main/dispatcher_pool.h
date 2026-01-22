@@ -36,6 +36,7 @@ const dispatcher_msg_ptr_t *dispatcher_pool_get_msg_const(const pool_msg_t *msg)
 
 void dispatcher_pool_log_stats(void);
 void dispatcher_pool_self_test(void);
+size_t dispatcher_pool_payload_size(dispatcher_pool_type_t type);
 
 pool_msg_t *dispatcher_pool_send_ptr(dispatcher_pool_type_t type,
                                      dispatch_source_t source,

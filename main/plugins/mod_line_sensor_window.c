@@ -43,7 +43,7 @@ static void line_sensor_window_process_msg(const dispatcher_msg_t *msg) {
 
     dispatch_target_t targets[TARGET_MAX];
     dispatcher_fill_targets(targets);
-    targets[0] = TARGET_LOG;
+    targets[0] = TARGET_SSE_LINE_SENSOR;
 
     uint8_t snapshot[LINE_SENSOR_WINDOW_SIZE] = {0};
     size_t snapshot_len = 0;

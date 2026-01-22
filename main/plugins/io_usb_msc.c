@@ -76,26 +76,12 @@ static void io_usb_msc_dispatcher_handler(const dispatcher_msg_t *msg)
 {
     dispatcher_module_enqueue(&io_usb_msc_mod, msg);
 }
-// MSC event callback — notifies RGB on mount/unmount
 static void msc_event_cb(tinyusb_msc_storage_handle_t handle, tinyusb_msc_event_t *event, void *arg) {
     if (!event || event->id != TINYUSB_MSC_EVENT_MOUNT_COMPLETE) return;
-    dispatcher_msg_t msg = {
-        .source = SOURCE_USB_MSC,
-        .message_len = 1,
-        .data = {0}
-    };
-    memset(msg.targets, TARGET_MAX, sizeof(msg.targets));
-    msg.targets[0] = TARGET_RGB;
     switch (event->mount_point) {
         case TINYUSB_MSC_STORAGE_MOUNT_APP:
-            // PC ejected/unmounted, app regains access
-            msg.data[0] = 0x5A;
-            dispatcher_send(&msg);
             return;
         case TINYUSB_MSC_STORAGE_MOUNT_USB:
-            // PC mounted, app lost access
-            msg.data[0] = 0xA5;
-            dispatcher_send(&msg);
             return;
         default:
             return;

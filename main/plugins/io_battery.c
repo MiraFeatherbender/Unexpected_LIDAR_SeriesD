@@ -1,13 +1,13 @@
 #include "io_battery.h"
 #include "dispatcher.h"
 #include "dispatcher_module.h"
+#include "dispatcher_pool.h"
 #include "rgb_anim.h"
 #include "UMSeriesD_idf.h"
 #include "battery_json.h"
 
 #include "freertos/FreeRTOS.h"
 #include "esp_log.h"
-#include "esp_heap_caps.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,9 +16,6 @@
 #define BATTERY_CHECK_INTERVAL_MS 3000
 static const char *TAG = "io_battery";
 
-// Persistent PSRAM-backed dispatcher_msg buffers (allocated in init)
-static dispatcher_msg_t *battery_rgb_msg = NULL;
-static dispatcher_msg_t *battery_log_msg = NULL;
 
 // Forward declarations
 static void battery_process_msg(const dispatcher_msg_t *msg);
@@ -41,6 +38,18 @@ static void battery_dispatcher_handler(const dispatcher_msg_t *msg) {
     dispatcher_module_enqueue(&battery_mod, msg);
 }
 
+static QueueHandle_t battery_ptr_queue = NULL;
+
+static void battery_ptr_task(void *arg) {
+    (void)arg;
+    while (1) {
+        pool_msg_t *pmsg = NULL;
+        if (xQueueReceive(battery_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
+            dispatcher_module_process_ptr_compat(&battery_mod, pmsg);
+        }
+    }
+}
+
 static bool battery_paused = false;
 
 static void battery_process_msg(const dispatcher_msg_t *msg)
@@ -59,13 +68,16 @@ static void battery_process_msg(const dispatcher_msg_t *msg)
             if (!battery_paused) {
                 battery_paused = true;
                 ESP_LOGI(TAG, "Received BATTERY_CMD_PAUSE: pausing battery step_frame");
-                dispatcher_msg_t log_msg = {0};
-                dispatcher_fill_targets(log_msg.targets);
-                log_msg.targets[0] = TARGET_LOG;
-                log_msg.source = SOURCE_BATTERY;
+                dispatch_target_t targets[TARGET_MAX];
+                dispatcher_fill_targets(targets);
+                targets[0] = TARGET_LOG;
                 const char *txt = "Battery updates paused";
-                log_msg.message_len = snprintf((char*)log_msg.data, BUF_SIZE, "%s", txt);
-                dispatcher_send(&log_msg);
+                dispatcher_pool_send_ptr(DISPATCHER_POOL_CONTROL,
+                                         SOURCE_BATTERY,
+                                         targets,
+                                         (const uint8_t *)txt,
+                                         strlen(txt),
+                                         NULL);
             }
             break;
         }
@@ -73,13 +85,16 @@ static void battery_process_msg(const dispatcher_msg_t *msg)
             if (battery_paused) {
                 battery_paused = false;
                 ESP_LOGI(TAG, "Received BATTERY_CMD_RESUME: resuming battery step_frame");
-                dispatcher_msg_t log_msg = {0};
-                dispatcher_fill_targets(log_msg.targets);
-                log_msg.targets[0] = TARGET_LOG;
-                log_msg.source = SOURCE_BATTERY;
+                dispatch_target_t targets[TARGET_MAX];
+                dispatcher_fill_targets(targets);
+                targets[0] = TARGET_LOG;
                 const char *txt = "Battery updates resumed";
-                log_msg.message_len = snprintf((char*)log_msg.data, BUF_SIZE, "%s", txt);
-                dispatcher_send(&log_msg);
+                dispatcher_pool_send_ptr(DISPATCHER_POOL_CONTROL,
+                                         SOURCE_BATTERY,
+                                         targets,
+                                         (const uint8_t *)txt,
+                                         strlen(txt),
+                                         NULL);
             }
             break;
         }
@@ -164,27 +179,16 @@ void io_battery_init(void)
     // Try to load battery tiers from JSON at startup
     battery_json_reload();
 
-    // Allocate persistent PSRAM-backed message buffers (reuse for lifetime)
-    if (!battery_rgb_msg) {
-        battery_rgb_msg = (dispatcher_msg_t *)heap_caps_calloc(1, sizeof(dispatcher_msg_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!battery_rgb_msg) {
-            battery_rgb_msg = (dispatcher_msg_t *)calloc(1, sizeof(dispatcher_msg_t));
-        }
-        if (battery_rgb_msg) ESP_LOGI(TAG, "Allocated battery_rgb_msg in heap");
-        else ESP_LOGW(TAG, "Failed to allocate battery_rgb_msg on heap");
-    }
-    if (!battery_log_msg) {
-        battery_log_msg = (dispatcher_msg_t *)heap_caps_calloc(1, sizeof(dispatcher_msg_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!battery_log_msg) {
-            battery_log_msg = (dispatcher_msg_t *)calloc(1, sizeof(dispatcher_msg_t));
-        }
-        if (battery_log_msg) ESP_LOGI(TAG, "Allocated battery_log_msg in heap");
-        else ESP_LOGW(TAG, "Failed to allocate battery_log_msg on heap");
-    }
-
     // Start dispatcher module (battery_mod is file-scope)
     dispatcher_module_start(&battery_mod, battery_dispatcher_handler);
     ESP_LOGI(TAG, "io_battery module started (stack=%u, queue_len=%u, step_ms=%u)", (unsigned)battery_mod.stack_size, (unsigned)battery_mod.queue_len, (unsigned)battery_mod.step_ms);
+
+    battery_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_BATTERY, battery_mod.queue_len);
+    if (!battery_ptr_queue) {
+        ESP_LOGE(TAG, "Failed to create pointer queue for io_battery");
+        return;
+    }
+    xTaskCreate(battery_ptr_task, "battery_ptr_task", battery_mod.stack_size, NULL, battery_mod.task_prio, NULL);
 }
 
 static void battery_step_frame(void)
@@ -204,86 +208,51 @@ static void battery_step_frame(void)
     }
 
     // -----------------------------
-    // 1. SEND RGB TIER MESSAGE (use persistent buffer if available)
+    // 1. SEND RGB TIER MESSAGE (pointer pool)
     // -----------------------------
-    if (battery_rgb_msg) {
-        dispatcher_fill_targets(battery_rgb_msg->targets);
-        battery_rgb_msg->targets[0] = TARGET_RGB;
-        battery_rgb_msg->source = SOURCE_BATTERY;
-
-        const battery_rgb_tier_t* tier = battery_get_rgb_tier(voltage, vbus);
-        if (tier) {
-            battery_rgb_msg->data[0] = tier->plugin;
-            battery_rgb_msg->data[1] = tier->h;
-            battery_rgb_msg->data[2] = tier->s;
-            battery_rgb_msg->data[3] = tier->v;
-            battery_rgb_msg->data[4] = tier->brightness;
-        } else {
-            // fallback/default values
-            battery_rgb_msg->data[0] = RGB_PLUGIN_OFF;
-            battery_rgb_msg->data[1] = 0;
-            battery_rgb_msg->data[2] = 0;
-            battery_rgb_msg->data[3] = 0;
-            battery_rgb_msg->data[4] = 0;
-        }
-        battery_rgb_msg->message_len = 5;
-        dispatcher_send(battery_rgb_msg);
+    uint8_t rgb_payload[5] = {0};
+    const battery_rgb_tier_t* tier = battery_get_rgb_tier(voltage, vbus);
+    if (tier) {
+        rgb_payload[0] = tier->plugin;
+        rgb_payload[1] = tier->h;
+        rgb_payload[2] = tier->s;
+        rgb_payload[3] = tier->v;
+        rgb_payload[4] = tier->brightness;
     } else {
-        dispatcher_msg_t rgb_msg = {0};
-        dispatcher_fill_targets(rgb_msg.targets);
-        rgb_msg.targets[0] = TARGET_RGB;
-        rgb_msg.source = SOURCE_BATTERY;
-        const battery_rgb_tier_t* tier = battery_get_rgb_tier(voltage, vbus);
-        if (tier) {
-            rgb_msg.data[0] = tier->plugin;
-            rgb_msg.data[1] = tier->h;
-            rgb_msg.data[2] = tier->s;
-            rgb_msg.data[3] = tier->v;
-            rgb_msg.data[4] = tier->brightness;
-        } else {
-            rgb_msg.data[0] = RGB_PLUGIN_OFF;
-            rgb_msg.data[1] = 0;
-            rgb_msg.data[2] = 0;
-            rgb_msg.data[3] = 0;
-            rgb_msg.data[4] = 0;
-        }
-        rgb_msg.message_len = 5;
-        dispatcher_send(&rgb_msg);
+        rgb_payload[0] = RGB_PLUGIN_OFF;
     }
 
-    // -----------------------------
-    // 2. SEND LOG TEXT MESSAGE (use persistent buffer if available)
-    // -----------------------------
-    if (battery_log_msg) {
-        dispatcher_fill_targets(battery_log_msg->targets);
-        battery_log_msg->targets[0] = TARGET_LOG;
-        battery_log_msg->source = SOURCE_BATTERY;
+    dispatch_target_t rgb_targets[TARGET_MAX];
+    dispatcher_fill_targets(rgb_targets);
+    rgb_targets[0] = TARGET_RGB;
+    dispatcher_pool_send_ptr(DISPATCHER_POOL_STREAMING,
+                             SOURCE_BATTERY,
+                             rgb_targets,
+                             rgb_payload,
+                             sizeof(rgb_payload),
+                             NULL);
 
-        battery_log_msg->message_len = snprintf(
-            (char *)battery_log_msg->data,
-            BUF_SIZE,
-            "VBUS=%d %s Voltage=%.2fV Percent=%d%%\r\n",
-            vbus ? 1 : 0,
-            state,
-            voltage,
-            percent
-        );
-        // dispatcher_send(battery_log_msg);
-    } else {
-        dispatcher_msg_t log_msg = {0};
-        dispatcher_fill_targets(log_msg.targets);
-        log_msg.targets[0] = TARGET_LOG;
-        log_msg.source = SOURCE_BATTERY;
+    // // -----------------------------
+    // // 2. SEND LOG TEXT MESSAGE (pointer pool)
+    // // -----------------------------
+    // char log_buf[128];
+    // size_t log_len = snprintf(
+    //     log_buf,
+    //     sizeof(log_buf),
+    //     "VBUS=%d %s Voltage=%.2fV Percent=%d%%\r\n",
+    //     vbus ? 1 : 0,
+    //     state,
+    //     voltage,
+    //     percent
+    // );
 
-        log_msg.message_len = snprintf(
-            (char *)log_msg.data,
-            BUF_SIZE,
-            "VBUS=%d %s Voltage=%.2fV Percent=%d%%\r\n",
-            vbus ? 1 : 0,
-            state,
-            voltage,
-            percent
-        );
-        // dispatcher_send(&log_msg);
-    }
+    // dispatch_target_t log_targets[TARGET_MAX];
+    // dispatcher_fill_targets(log_targets);
+    // log_targets[0] = TARGET_LOG;
+    // dispatcher_pool_send_ptr(DISPATCHER_POOL_STREAMING,
+    //                          SOURCE_BATTERY,
+    //                          log_targets,
+    //                          (const uint8_t *)log_buf,
+    //                          log_len,
+    //                          NULL);
 }

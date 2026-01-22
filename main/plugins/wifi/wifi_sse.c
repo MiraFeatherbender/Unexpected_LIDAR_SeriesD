@@ -1,6 +1,8 @@
 #include "wifi_sse.h"
 #include "wifi_http_server.h"
 #include "dispatcher.h"
+#include "dispatcher_pool.h"
+#include "dispatcher_module.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -16,6 +18,11 @@
 
 static const char *TAG = "wifi_sse";
 #define SSE_KEEPALIVE_MS 5000
+#define SSE_PTR_QUEUE_LEN 8
+#define SSE_PTR_TASK_STACK 4096
+#define SSE_HEXBUF_LEN (32 * 3 + 1)
+#define SSE_B64BUF_LEN (((32 + 2) / 3 * 4) + 1)
+#define SSE_JSONBUF_LEN 1024
 
 typedef struct sse_client {
     httpd_req_t *req;
@@ -27,6 +34,17 @@ static httpd_handle_t sse_server = NULL;
 static sse_client_t *clients = NULL;
 static SemaphoreHandle_t clients_mutex = NULL;
 static TaskHandle_t keepalive_task = NULL;
+static QueueHandle_t sse_ptr_queue = NULL;
+
+static void *sse_alloc_psram(size_t size) {
+    void *p = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!p) p = malloc(size);
+    return p;
+}
+
+static void sse_free(void *p) {
+    if (p) free(p);
+}
 
 /* Map dispatch_target_t to a short event name (switch/case, enums used directly) */
 static const char *target_to_event_name(dispatch_target_t t) {
@@ -35,6 +53,125 @@ static const char *target_to_event_name(dispatch_target_t t) {
         case TARGET_SSE_LINE_SENSOR: return "line_sensor";
         case TARGET_SSE: return "sse";
         default: return NULL;
+    }
+}
+
+/* Simple base64 encoder (outputs null-terminated string). Returns output length or 0 on failure. */
+static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static size_t base64_encode(const uint8_t *in, size_t in_len, char *out, size_t out_size) {
+    if (!out) return 0;
+    size_t needed = ((in_len + 2) / 3) * 4;
+    if (out_size < needed + 1) return 0;
+    size_t i = 0, o = 0;
+    while (i + 2 < in_len) {
+        uint32_t v = ((uint32_t)in[i] << 16) | ((uint32_t)in[i+1] << 8) | (uint32_t)in[i+2];
+        out[o++] = b64_table[(v >> 18) & 0x3F];
+        out[o++] = b64_table[(v >> 12) & 0x3F];
+        out[o++] = b64_table[(v >> 6) & 0x3F];
+        out[o++] = b64_table[v & 0x3F];
+        i += 3;
+    }
+    int rem = in_len - i;
+    if (rem) {
+        uint32_t v = (uint32_t)in[i] << 16;
+        if (rem == 2) v |= (uint32_t)in[i+1] << 8;
+        out[o++] = b64_table[(v >> 18) & 0x3F];
+        out[o++] = b64_table[(v >> 12) & 0x3F];
+        out[o++] = (rem == 2) ? b64_table[(v >> 6) & 0x3F] : '=';
+        out[o++] = '=';
+    }
+    out[o] = '\0';
+    return o;
+}
+
+void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload);
+
+static void wifi_sse_dispatch_common(dispatch_source_t source,
+                                     const dispatch_target_t *targets,
+                                     const uint8_t *data,
+                                     size_t data_len) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "source", (int)source);
+    cJSON_AddStringToObject(root, "level", "info");
+    /* Use milliseconds since boot; browser Date(number) handles epoch ms-style values */
+    cJSON_AddNumberToObject(root, "time", (double)(esp_timer_get_time() / 1000));
+
+    if (data_len > 0 && data) {
+        switch (source) {
+            case SOURCE_LINE_SENSOR:
+            case SOURCE_MSC_BUTTON:
+            case SOURCE_LINE_SENSOR_WINDOW: {
+                size_t byte_len = data_len;
+                if (byte_len > 32) byte_len = 32; // limit payload size
+
+                char *hexbuf = (char *)sse_alloc_psram(SSE_HEXBUF_LEN);
+                char *b64buf = (char *)sse_alloc_psram(SSE_B64BUF_LEN);
+                if (hexbuf) {
+                    memset(hexbuf, 0, SSE_HEXBUF_LEN);
+                    size_t off = 0;
+                    for (size_t i = 0; i < byte_len; ++i) {
+                        off += snprintf(hexbuf + off, SSE_HEXBUF_LEN - off, "%02X ", data[i]);
+                        if (off >= SSE_HEXBUF_LEN) break;
+                    }
+                    if (off > 0 && off < SSE_HEXBUF_LEN) {
+                        hexbuf[off - 1] = '\0'; // trim trailing space
+                    }
+                    cJSON_AddStringToObject(root, "data", hexbuf); // legacy field
+                    cJSON_AddStringToObject(root, "msg", hexbuf);
+                }
+
+                if (b64buf) {
+                    size_t b64_len = base64_encode(data, byte_len, b64buf, SSE_B64BUF_LEN);
+                    if (b64_len) {
+                        cJSON_AddStringToObject(root, "data_b64", b64buf);
+                    }
+                }
+
+                /* Metadata for unambiguous parsing */
+                cJSON_AddStringToObject(root, "schema", "line_sensor.v1");
+                cJSON_AddNumberToObject(root, "byte_count", (int)byte_len);
+                cJSON_AddStringToObject(root, "bit_order", "msb");
+
+                sse_free(hexbuf);
+                sse_free(b64buf);
+                break;
+            }
+            default: {
+                /* Add message bytes as a base64-safe string or plain text; for simplicity, treat as string */
+                cJSON_AddStringToObject(root, "data", (const char*)data);
+                cJSON_AddStringToObject(root, "msg", (const char*)data);
+                break;
+            }
+        }
+    } else {
+        cJSON_AddNullToObject(root, "data");
+        cJSON_AddStringToObject(root, "msg", "");
+    }
+
+    /* For each target entry in the message, forward if it's an SSE target */
+    for (int i = 0; i < TARGET_MAX; ++i) {
+        dispatch_target_t t = targets[i];
+        if (t == TARGET_MAX) continue; // sentinel marking unused slot
+        const char *ename = target_to_event_name(t);
+        if (ename) {
+            wifi_sse_broadcast(t, root);
+        }
+    }
+
+    cJSON_Delete(root);
+}
+
+static void wifi_sse_ptr_task(void *arg) {
+    (void)arg;
+    while (1) {
+        pool_msg_t *pmsg = NULL;
+        if (xQueueReceive(sse_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
+            const dispatcher_msg_ptr_t *pm = dispatcher_pool_get_msg_const(pmsg);
+            if (pm) {
+                wifi_sse_dispatch_common(pm->source, pm->targets, pm->data, pm->message_len);
+            }
+            dispatcher_pool_msg_unref(pmsg);
+        }
     }
 }
 
@@ -70,40 +207,21 @@ static uint64_t build_mask_from_csv(const char *csv) {
     return mask;
 }
 
-/* Simple base64 encoder (outputs null-terminated string). Returns output length or 0 on failure. */
-static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static size_t base64_encode(const uint8_t *in, size_t in_len, char *out, size_t out_size) {
-    if (!out) return 0;
-    size_t needed = ((in_len + 2) / 3) * 4;
-    if (out_size < needed + 1) return 0;
-    size_t i = 0, o = 0;
-    while (i + 2 < in_len) {
-        uint32_t v = ((uint32_t)in[i] << 16) | ((uint32_t)in[i+1] << 8) | (uint32_t)in[i+2];
-        out[o++] = b64_table[(v >> 18) & 0x3F];
-        out[o++] = b64_table[(v >> 12) & 0x3F];
-        out[o++] = b64_table[(v >> 6) & 0x3F];
-        out[o++] = b64_table[v & 0x3F];
-        i += 3;
-    }
-    int rem = in_len - i;
-    if (rem) {
-        uint32_t v = (uint32_t)in[i] << 16;
-        if (rem == 2) v |= (uint32_t)in[i+1] << 8;
-        out[o++] = b64_table[(v >> 18) & 0x3F];
-        out[o++] = b64_table[(v >> 12) & 0x3F];
-        out[o++] = (rem == 2) ? b64_table[(v >> 6) & 0x3F] : '=';
-        out[o++] = '=';
-    }
-    out[o] = '\0';
-    return o;
-}
-
 void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload) {
     if (!payload) return;
     const char *ename = target_to_event_name(target);
     if (!ename) return;
 
-    char *json = cJSON_PrintUnformatted(payload);
+    char *json_buf = (char *)sse_alloc_psram(SSE_JSONBUF_LEN);
+    char *json = NULL;
+    bool used_prealloc = false;
+    if (json_buf && cJSON_PrintPreallocated(payload, json_buf, SSE_JSONBUF_LEN, false)) {
+        json = json_buf;
+        used_prealloc = true;
+    } else {
+        if (json_buf) sse_free(json_buf);
+        json = cJSON_PrintUnformatted(payload);
+    }
     if (!json) return;
     uint64_t bit = mask_for_target(target);
 
@@ -134,74 +252,16 @@ void wifi_sse_broadcast(dispatch_target_t target, cJSON *payload) {
         prev = &(*prev)->next;
     }
     xSemaphoreGive(clients_mutex);
-    cJSON_free(json);
+    if (used_prealloc) {
+        sse_free(json);
+    } else {
+        cJSON_free(json);
+    }
 }
 
 void wifi_sse_dispatch_handler(const dispatcher_msg_t *msg) {
     if (!msg) return;
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "source", (int)msg->source);
-    cJSON_AddStringToObject(root, "level", "info");
-    /* Use milliseconds since boot; browser Date(number) handles epoch ms-style values */
-    cJSON_AddNumberToObject(root, "time", (double)(esp_timer_get_time() / 1000));
-    if (msg->message_len > 0) {
-        switch (msg->source) {
-            case SOURCE_LINE_SENSOR:
-            case SOURCE_MSC_BUTTON:
-            case SOURCE_LINE_SENSOR_WINDOW: {
-                size_t byte_len = msg->message_len;
-                if (byte_len > 32) byte_len = 32; // limit payload size
-
-                /* Hex representation (backwards compatible for console/log) */
-                char hexbuf[32 * 3 + 1] = {0};
-                size_t off = 0;
-                for (size_t i = 0; i < byte_len; ++i) {
-                    off += snprintf(hexbuf + off, sizeof(hexbuf) - off, "%02X ", msg->data[i]);
-                    if (off >= sizeof(hexbuf)) break;
-                }
-                if (off > 0 && off < sizeof(hexbuf)) {
-                    hexbuf[off - 1] = '\0'; // trim trailing space
-                }
-                cJSON_AddStringToObject(root, "data", hexbuf); // legacy field
-                cJSON_AddStringToObject(root, "msg", hexbuf);
-
-                /* Base64 representation for machine/UI parsing */
-                char b64buf[( (32 + 2) / 3 * 4 ) + 1];
-                size_t b64_len = base64_encode(msg->data, byte_len, b64buf, sizeof(b64buf));
-                if (b64_len) {
-                    cJSON_AddStringToObject(root, "data_b64", b64buf);
-                }
-
-                /* Metadata for unambiguous parsing */
-                cJSON_AddStringToObject(root, "schema", "line_sensor.v1");
-                cJSON_AddNumberToObject(root, "byte_count", (int)byte_len);
-                cJSON_AddStringToObject(root, "bit_order", "msb");
-
-                break;
-            }
-            default: {
-                /* Add message bytes as a base64-safe string or plain text; for simplicity, treat as string */
-                cJSON_AddStringToObject(root, "data", (const char*)msg->data);
-                cJSON_AddStringToObject(root, "msg", (const char*)msg->data);
-                break;
-            }
-        }
-    } else {
-        cJSON_AddNullToObject(root, "data");
-        cJSON_AddStringToObject(root, "msg", "");
-    }
-
-    /* For each target entry in the message, forward if it's an SSE target */
-    for (int i = 0; i < TARGET_MAX; ++i) {
-        dispatch_target_t t = msg->targets[i];
-        if (t == TARGET_MAX) continue; // sentinel marking unused slot
-        const char *ename = target_to_event_name(t);
-        if (ename) {
-            wifi_sse_broadcast(t, root);
-        }
-    }
-
-    cJSON_Delete(root);
+    wifi_sse_dispatch_common(msg->source, msg->targets, msg->data, msg->message_len);
 } 
 
 
@@ -392,12 +452,27 @@ esp_err_t wifi_sse_init(httpd_handle_t server) {
     dispatcher_register_handler(TARGET_SSE_LINE_SENSOR, wifi_sse_dispatch_handler);
     dispatcher_register_handler(TARGET_SSE, wifi_sse_dispatch_handler);
 
+    if (!sse_ptr_queue) {
+        sse_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_SSE, SSE_PTR_QUEUE_LEN);
+        if (sse_ptr_queue) {
+            dispatcher_register_ptr_queue(TARGET_SSE_CONSOLE, sse_ptr_queue);
+            dispatcher_register_ptr_queue(TARGET_SSE_LINE_SENSOR, sse_ptr_queue);
+            xTaskCreate(wifi_sse_ptr_task, "wifi_sse_ptr_task", SSE_PTR_TASK_STACK, NULL, tskIDLE_PRIORITY + 1, NULL);
+        } else {
+            ESP_LOGW(TAG, "Failed to create SSE pointer queue");
+        }
+    }
+
     ESP_LOGI(TAG, "SSE handlers registered on shared HTTP server");
     return ESP_OK;
 }
 
 esp_err_t wifi_sse_deinit(void) {
     sse_server = NULL;
+    if (sse_ptr_queue) {
+        vQueueDelete(sse_ptr_queue);
+        sse_ptr_queue = NULL;
+    }
     if (keepalive_task) {
         vTaskDelete(keepalive_task);
         keepalive_task = NULL;

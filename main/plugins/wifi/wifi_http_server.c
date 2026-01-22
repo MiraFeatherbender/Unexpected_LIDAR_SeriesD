@@ -1,6 +1,7 @@
 #include "wifi_http_server.h"
 #include "io_fatfs.h"
 #include "dispatcher.h"
+#include "dispatcher_pool.h"
 #include "io_rgb.h"
 #include "rest_context.h"
 #include "wifi_sse.h"
@@ -226,9 +227,52 @@ static esp_err_t dispatch_from_rest(const httpd_req_t *req, void *user_ctx, cons
     if (!user_ctx || !data || len == 0) {
         return ESP_ERR_INVALID_ARG;
     }
+    dispatch_target_t target = (dispatch_target_t)(intptr_t)user_ctx;
+
+    if (dispatcher_has_ptr_queue(target)) {
+        pool_msg_t *pmsg = dispatcher_pool_try_alloc(DISPATCHER_POOL_CONTROL);
+        if (!pmsg) {
+            if (len == sizeof(rest_json_request_t)) {
+                rest_json_request_t *req_ctx = (rest_json_request_t *)data;
+                if (req_ctx->sem) xSemaphoreGive(req_ctx->sem);
+            }
+            return ESP_ERR_NO_MEM;
+        }
+
+        dispatcher_msg_ptr_t *msg = dispatcher_pool_get_msg(pmsg);
+        if (!msg || !msg->data) {
+            dispatcher_pool_msg_unref(pmsg);
+            return ESP_FAIL;
+        }
+
+        msg->source = SOURCE_REST;
+        dispatcher_fill_targets(msg->targets);
+        msg->targets[0] = target;
+
+        if (len == sizeof(rest_json_request_t)) {
+            msg->context = (void *)data;
+            msg->message_len = 0;
+            ESP_LOGI(TAG, "dispatch_from_rest: REST GET (ptr), context=%p", msg->context);
+        } else {
+            size_t max_len = dispatcher_pool_payload_size(DISPATCHER_POOL_CONTROL);
+            size_t copy_len = len > max_len ? max_len : len;
+            memcpy(msg->data, data, copy_len);
+            msg->message_len = copy_len;
+            msg->context = NULL;
+            ESP_LOGI(TAG, "dispatch_from_rest: REST COMMAND (ptr), copying %d bytes", (int)copy_len);
+        }
+
+        int sent = dispatcher_broadcast_ptr(pmsg, msg->targets);
+        if (sent == 0 && len == sizeof(rest_json_request_t)) {
+            rest_json_request_t *req_ctx = (rest_json_request_t *)data;
+            if (req_ctx->sem) xSemaphoreGive(req_ctx->sem);
+        }
+        return sent > 0 ? ESP_OK : ESP_FAIL;
+    }
+
     dispatcher_msg_t msg = {0};
     msg.source = SOURCE_REST;
-    msg.targets[0] = (dispatch_target_t)(intptr_t)user_ctx; // user_ctx is (void*)(TARGET_*)
+    msg.targets[0] = target; // user_ctx is (void*)(TARGET_*)
 
     // If this is a REST GET (context struct), pass via msg.context
     if (len == sizeof(rest_json_request_t)) {

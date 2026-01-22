@@ -1,5 +1,7 @@
 #include "io_lidar.h"
 #include "dispatcher.h"
+#include "dispatcher_pool.h"
+#include "dispatcher_module.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -9,27 +11,17 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 
-#define UART_TX_QUEUE_LEN 10
 #define UART_EVENT_QUEUE_LEN 10
 
 // Queues
-static QueueHandle_t uart_tx_queue = NULL;
 static QueueHandle_t uart_event_queue = NULL;
+static QueueHandle_t uart_tx_ptr_queue = NULL;
 
 // Forward declarations
 static void io_lidar_tx_task(void *arg);
 
-// Dispatcher handler — messages routed TO UART
-static void io_lidar_dispatcher_handler(const dispatcher_msg_t *msg)
-{
-    xQueueSend(uart_tx_queue, msg, 0);
-}
-
 void io_lidar_init(void)
 {
-    // Create TX queue
-    uart_tx_queue = xQueueCreate(UART_TX_QUEUE_LEN, sizeof(dispatcher_msg_t));
-
     // UART config
     uart_config_t uart_config = {
         .baud_rate = CONFIG_EXAMPLE_UART_BAUD_RATE,
@@ -61,8 +53,11 @@ void io_lidar_init(void)
                                  UART_PIN_NO_CHANGE,
                                  UART_PIN_NO_CHANGE));
 
-    // Register with dispatcher
-    dispatcher_register_handler(TARGET_LIDAR_IO, io_lidar_dispatcher_handler);
+    // Register pointer queue with dispatcher
+    uart_tx_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_LIDAR_IO, 10);
+    if (!uart_tx_ptr_queue) {
+        ESP_LOGE("io_lidar", "Failed to create pointer queue for LIDAR TX");
+    }
 
     // Start TX task
     xTaskCreate(io_lidar_tx_task, "io_lidar_tx_task", 4096, NULL, 9, NULL);
@@ -82,17 +77,21 @@ void io_lidar_event_task(void *arg)
         if (xQueueReceive(uart_event_queue, &event, portMAX_DELAY)) {
 
             if (event.type == UART_DATA) {
-                dispatcher_msg_t msg = {0};
-
-                msg.message_len = uart_read_bytes(CONFIG_EXAMPLE_UART_PORT_NUM,
-                                                  msg.data,
-                                                  BUF_SIZE - 1,
-                                                  20 / portTICK_PERIOD_MS);
-                memset(msg.targets, TARGET_MAX, sizeof(msg.targets));
-                if (msg.message_len > 0) {
-                    msg.source = SOURCE_LIDAR_IO;
-                    msg.targets[0] = TARGET_LIDAR_COORD;   // UART → LIDAR_COORD bridge
-                    dispatcher_send(&msg);
+                uint8_t tmp_buf[BUF_SIZE] = {0};
+                int len = uart_read_bytes(CONFIG_EXAMPLE_UART_PORT_NUM,
+                                          tmp_buf,
+                                          BUF_SIZE - 1,
+                                          20 / portTICK_PERIOD_MS);
+                if (len > 0) {
+                    dispatch_target_t targets[TARGET_MAX];
+                    dispatcher_fill_targets(targets);
+                    targets[0] = TARGET_LIDAR_COORD;   // UART → LIDAR_COORD bridge
+                    dispatcher_pool_send_ptr(DISPATCHER_POOL_STREAMING,
+                                             SOURCE_LIDAR_IO,
+                                             targets,
+                                             tmp_buf,
+                                             (size_t)len,
+                                             NULL);
                 }
             }
         }
@@ -102,13 +101,16 @@ void io_lidar_event_task(void *arg)
 // TX task — sends data OUT over UART
 static void io_lidar_tx_task(void *arg)
 {
-    dispatcher_msg_t msg = {0};
-
     while (1) {
-        if (xQueueReceive(uart_tx_queue, &msg, portMAX_DELAY) == pdTRUE) {
-            uart_write_bytes(CONFIG_EXAMPLE_UART_PORT_NUM,
-                             (const char *)msg.data,
-                             msg.message_len);
+        pool_msg_t *pmsg = NULL;
+        if (xQueueReceive(uart_tx_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
+            const dispatcher_msg_ptr_t *msg = dispatcher_pool_get_msg_const(pmsg);
+            if (msg && msg->data && msg->message_len > 0) {
+                uart_write_bytes(CONFIG_EXAMPLE_UART_PORT_NUM,
+                                 (const char *)msg->data,
+                                 msg->message_len);
+            }
+            dispatcher_pool_msg_unref(pmsg);
         }
     }
 }

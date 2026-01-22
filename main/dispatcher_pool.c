@@ -378,6 +378,10 @@ void dispatcher_pool_self_test(void) {
     ESP_LOGI(TAG, "dispatcher_pool self-test end");
 }
 
+size_t dispatcher_pool_payload_size(dispatcher_pool_type_t type) {
+    return (type == DISPATCHER_POOL_CONTROL) ? control_pool.payload_size : streaming_pool.payload_size;
+}
+
 pool_msg_t *dispatcher_pool_send_ptr(dispatcher_pool_type_t type,
                                      dispatch_source_t source,
                                      const dispatch_target_t *targets,
