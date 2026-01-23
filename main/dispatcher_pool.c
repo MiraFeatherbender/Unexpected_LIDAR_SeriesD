@@ -3,6 +3,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 
@@ -18,6 +19,7 @@ struct pool_msg_s {
     dispatcher_msg_ptr_t msg;
     dispatcher_pool_t *pool;
     struct pool_msg_s *next;
+    uint8_t on_free_list; /* flag: 1 if currently on pool free_list */
 };
 
 struct dispatcher_pool_s {
@@ -32,12 +34,17 @@ struct dispatcher_pool_s {
     uint32_t alloc_failures;
     uint32_t in_use;
     uint32_t max_in_use;
+    uint32_t double_free_count; /* number of detected double-unrefs */
+    uint32_t corrupt_checks;    /* number of consistency checks performed */
 };
 
 static const char *TAG = "dispatcher_pool";
 
 static dispatcher_pool_t streaming_pool = {0};
 static dispatcher_pool_t control_pool = {0};
+
+// Forward declare dispatcher_pool_stats_task
+static void dispatcher_pool_stats_task(void *arg);
 
 static int clamp_int(int value, int min_v, int max_v) {
     if (value < min_v) return min_v;
@@ -57,11 +64,13 @@ static pool_msg_t *pool_pop(dispatcher_pool_t *pool) {
     pool_msg_t *msg = pool->free_list;
     pool->free_list = msg->next;
     msg->next = NULL;
+    msg->on_free_list = 0;
     return msg;
 }
 
 static void pool_push(dispatcher_pool_t *pool, pool_msg_t *msg) {
     if (!pool || !msg) return;
+    msg->on_free_list = 1;
     msg->next = pool->free_list;
     pool->free_list = msg;
 }
@@ -128,6 +137,7 @@ static int pool_init(dispatcher_pool_t *pool, const char *name, const pool_confi
         pool->entries[i].msg.data = pool->payload_region + (i * payload_size);
         pool->entries[i].msg.message_len = 0;
         dispatcher_fill_targets(pool->entries[i].msg.targets);
+        pool->entries[i].on_free_list = 1; /* initially free */
         pool->entries[i].next = pool->free_list;
         pool->free_list = &pool->entries[i];
     }
@@ -153,6 +163,20 @@ int dispatcher_pool_init(void) {
     }
 
     dispatcher_pool_self_test();
+
+    // Start a low-priority periodic task to log pool stats every 10s.
+    BaseType_t ok = xTaskCreate(
+        (TaskFunction_t)dispatcher_pool_stats_task,
+        "dispatcher_pool_stats",
+        4096,
+        NULL,
+        tskIDLE_PRIORITY + 1,
+        NULL
+    );
+    if (ok != pdPASS) {
+        ESP_LOGW(TAG, "Failed to create dispatcher_pool_stats task");
+    }
+
     return 0;
 }
 
@@ -185,7 +209,23 @@ pool_msg_t *dispatcher_pool_try_alloc(dispatcher_pool_type_t type) {
     xSemaphoreGive(pool->mutex);
 
     if (!msg) {
-        ESP_LOGE(TAG, "%s pool internal empty despite semaphore", pool->name);
+        ESP_LOGE(TAG, "%s pool internal empty despite semaphore (in_use=%u entry_count=%u)", pool->name, (unsigned)pool->in_use, (unsigned)pool->entry_count);
+        /* Consistency check */
+        if (xSemaphoreTake(pool->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            size_t free_count = 0;
+            pool_msg_t *it = pool->free_list;
+            while (it) { free_count++; it = it->next; }
+            ESP_LOGW(TAG, "%s pool consistency: free_count=%u in_use=%u entry_count=%u double_free_count=%u",
+                     pool->name, (unsigned)free_count, (unsigned)pool->in_use, (unsigned)pool->entry_count, (unsigned)pool->double_free_count);
+            if (pool->entry_count <= 64) {
+                for (size_t i = 0; i < pool->entry_count; ++i) {
+                    pool_msg_t *e = &pool->entries[i];
+                    ESP_LOGW(TAG, " entry[%u] ref=%u on_free_list=%u", (unsigned)i, (unsigned)e->ref, (unsigned)e->on_free_list);
+                }
+            }
+            pool->corrupt_checks++;
+            xSemaphoreGive(pool->mutex);
+        }
         xSemaphoreGive(pool->available);
         return NULL;
     }
@@ -225,7 +265,23 @@ pool_msg_t *dispatcher_pool_alloc_blocking(dispatcher_pool_type_t type, uint32_t
     xSemaphoreGive(pool->mutex);
 
     if (!msg) {
-        ESP_LOGE(TAG, "%s pool internal empty despite semaphore", pool->name);
+        ESP_LOGE(TAG, "%s pool internal empty despite semaphore (in_use=%u entry_count=%u)", pool->name, (unsigned)pool->in_use, (unsigned)pool->entry_count);
+        /* Consistency check */
+        if (xSemaphoreTake(pool->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            size_t free_count = 0;
+            pool_msg_t *it = pool->free_list;
+            while (it) { free_count++; it = it->next; }
+            ESP_LOGW(TAG, "%s pool consistency: free_count=%u in_use=%u entry_count=%u double_free_count=%u",
+                     pool->name, (unsigned)free_count, (unsigned)pool->in_use, (unsigned)pool->entry_count, (unsigned)pool->double_free_count);
+            if (pool->entry_count <= 64) {
+                for (size_t i = 0; i < pool->entry_count; ++i) {
+                    pool_msg_t *e = &pool->entries[i];
+                    ESP_LOGW(TAG, " entry[%u] ref=%u on_free_list=%u", (unsigned)i, (unsigned)e->ref, (unsigned)e->on_free_list);
+                }
+            }
+            pool->corrupt_checks++;
+            xSemaphoreGive(pool->mutex);
+        }
         xSemaphoreGive(pool->available);
         return NULL;
     }
@@ -253,10 +309,32 @@ void dispatcher_pool_msg_unref(pool_msg_t *msg) {
     if (!pool || !pool->mutex || !pool->available) return;
 
     if (xSemaphoreTake(pool->mutex, portMAX_DELAY) == pdTRUE) {
+        // Detect double-unref / double-push: if msg already on free_list, skip push
+        if (msg->on_free_list) {
+            pool->double_free_count++;
+            const char *task = pcTaskGetName(NULL);
+            void *ra = __builtin_return_address(0);
+            ESP_LOGW(TAG, "double-unref detected: msg=%p source=%d ref_after_unsub=%u (skipping push) task=%s ra=%p", (void*)msg, (int)msg->msg.source, (unsigned)v, task ? task : "(null)", ra);
+            /* Optional: print small backtrace addresses for quicker triage */
+            void *ra1 = __builtin_return_address(1);
+            void *ra2 = __builtin_return_address(2);
+            ESP_LOGW(TAG, "  backtrace addrs: ra0=%p ra1=%p ra2=%p", ra, ra1, ra2);
+            // Sanity: ensure in_use is non-zero before decrement
+            if (pool->in_use > 0) pool->in_use--;
+            xSemaphoreGive(pool->mutex);
+            return;
+        }
+
+        // Normal return to pool
         pool_push(pool, msg);
         if (pool->in_use > 0) pool->in_use--;
         xSemaphoreGive(pool->mutex);
         xSemaphoreGive(pool->available);
+    }
+
+    // Detect suspicious ref wrap underflow
+    if (v > 1000 || (pool && v > pool->entry_count)) {
+        ESP_LOGW(TAG, "suspicious ref value after unref: %u for msg=%p", (unsigned)v, (void*)msg);
     }
 }
 
@@ -273,12 +351,24 @@ void dispatcher_pool_log_stats(void) {
     for (int i = 0; i < 2; ++i) {
         dispatcher_pool_t *p = pools[i];
         if (!p || !p->entries) continue;
-        ESP_LOGI(TAG, "%s pool stats: total=%u in_use=%u max_in_use=%u alloc_failures=%u",
+        ESP_LOGI(TAG, "%s pool stats: total=%u in_use=%u max_in_use=%u alloc_failures=%u double_free=%u checks=%u",
                  p->name,
                  (unsigned)p->entry_count,
                  (unsigned)p->in_use,
                  (unsigned)p->max_in_use,
-                 (unsigned)p->alloc_failures);
+                 (unsigned)p->alloc_failures,
+                 (unsigned)p->double_free_count,
+                 (unsigned)p->corrupt_checks);
+    }
+}
+
+static void dispatcher_pool_stats_task(void *arg) {
+    (void)arg;
+    for (;;) {
+        dispatcher_pool_log_stats();
+        UBaseType_t hwm = uxTaskGetStackHighWaterMark(NULL);
+        ESP_LOGI(TAG, "dispatcher_pool_stats stack high-water mark: %u", (unsigned)hwm);
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
@@ -405,6 +495,22 @@ pool_msg_t *dispatcher_pool_send_ptr_params(const dispatcher_pool_send_params_t 
     pool_msg_t *pmsg = dispatcher_pool_try_alloc(params->type);
     if (!pmsg) {
         ESP_LOGW(TAG, "pool alloc failed for source %d", params->source);
+        // Diagnostic: log per-target queue depth & capacity to help diagnose which consumers are backlogged
+        if (params && params->targets) {
+            for (int i = 0; i < TARGET_MAX; ++i) {
+                dispatch_target_t t = params->targets[i];
+                if (t == TARGET_MAX) continue;
+                QueueHandle_t q = dispatcher_get_ptr_queue(t);
+                if (!q) {
+                    ESP_LOGW(TAG, " target %d: no pointer queue registered", (int)t);
+                } else {
+                    UBaseType_t waiting = uxQueueMessagesWaiting(q);
+                    UBaseType_t spaces = uxQueueSpacesAvailable(q);
+                    UBaseType_t capacity = waiting + spaces; // approximate queue length
+                    ESP_LOGW(TAG, " target %d: queue depth %u/%u (waiting=%u spaces=%u)", (int)t, (unsigned)waiting, (unsigned)capacity, (unsigned)waiting, (unsigned)spaces);
+                }
+            }
+        }
         return NULL;
     }
 

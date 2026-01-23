@@ -48,24 +48,9 @@ static dispatcher_module_t io_log_mod = {
     .queue = NULL
 };
 
-static QueueHandle_t io_log_ptr_queue = NULL;
-
-static void io_log_ptr_task(void *arg) {
-    (void)arg;
-    while (1) {
-        pool_msg_t *pmsg = NULL;
-        if (xQueueReceive(io_log_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
-            dispatcher_module_process_ptr_compat(&io_log_mod, pmsg);
-        }
-    }
-}
-
 void io_log_init(void) {
-    io_log_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_LOG, io_log_mod.queue_len);
-    if (!io_log_ptr_queue) {
-        ESP_LOGE("io_log", "Failed to create pointer queue for io_log");
+    if (dispatcher_module_start(&io_log_mod) != pdTRUE) {
+        ESP_LOGE("io_log", "Failed to start dispatcher module for io_log");
         return;
     }
-
-    xTaskCreate(io_log_ptr_task, "io_log_ptr_task", io_log_mod.stack_size, NULL, io_log_mod.task_prio, NULL);
 }

@@ -33,8 +33,6 @@ static dispatcher_module_t io_rgb_mod = {
     .next_step = 0
 };
 
-static QueueHandle_t io_rgb_ptr_queue = NULL;
-
 typedef enum {
     RGB_PLUGIN_TYPE_HSV = 0,
     RGB_PLUGIN_TYPE_RGB = 1,
@@ -186,40 +184,6 @@ void io_rgb_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
     io_rgb_register_hsv_plugin(id, plugin);
 }
 
-// Dispatcher handler — messages routed TO RGB
-static void io_rgb_ptr_task(void *arg) {
-    (void)arg;
-    dispatcher_module_t *module = &io_rgb_mod;
-    if (!io_rgb_ptr_queue) {
-        ESP_LOGE("io_rgb", "Pointer queue not initialized");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    while (1) {
-        TickType_t timeout = portMAX_DELAY;
-        if (module->step_ms > 0) {
-            if (module->next_step == 0) {
-                module->next_step = xTaskGetTickCount() + pdMS_TO_TICKS(module->step_ms);
-            }
-            TickType_t now = xTaskGetTickCount();
-            timeout = (module->next_step > now) ? (module->next_step - now) : 0;
-        }
-
-        pool_msg_t *pmsg = NULL;
-        if (xQueueReceive(io_rgb_ptr_queue, &pmsg, timeout) == pdTRUE) {
-            dispatcher_module_process_ptr_compat(module, pmsg);
-        }
-
-        if (module->step_frame && module->step_ms > 0) {
-            TickType_t now = xTaskGetTickCount();
-            if ((int32_t)(now - module->next_step) >= 0) {
-                module->step_frame();
-                module->next_step = now + pdMS_TO_TICKS(module->step_ms);
-            }
-        }
-    }
-}
 
 void io_rgb_init(void)
 {
@@ -227,14 +191,10 @@ void io_rgb_init(void)
     ums3_set_pixel_brightness(anim_brightness);
     ums3_set_pixel_color(0, 0, 0);    
     
-    io_rgb_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_RGB, io_rgb_mod.queue_len);
-    if (!io_rgb_ptr_queue) {
-        ESP_LOGE("io_rgb", "Failed to create pointer queue for io_rgb");
+    if (dispatcher_module_start(&io_rgb_mod) != pdTRUE) {
+        ESP_LOGE("io_rgb", "Failed to start dispatcher module for io_rgb");
         return;
     }
-
-    io_rgb_mod.next_step = 0;
-    xTaskCreate(io_rgb_ptr_task, "io_rgb_ptr_task", io_rgb_mod.stack_size, NULL, io_rgb_mod.task_prio, NULL);
 }
 
 

@@ -8,6 +8,7 @@ idf_component_register(
         "main.c"
         "dispatcher.c"
         "dispatcher_pool.c"
+        "dispatcher_module.c"
 
         # Core plugin sources
         "plugins/io_gpio.c"

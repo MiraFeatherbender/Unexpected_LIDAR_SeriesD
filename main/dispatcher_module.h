@@ -22,6 +22,8 @@ typedef struct {
     uint32_t step_ms;
     QueueHandle_t queue;
     TickType_t next_step;
+    /* Tick count of last queue-depth warning, used to rate-limit warnings */
+    TickType_t last_queue_warn;
 } dispatcher_module_t;
 
 static inline QueueHandle_t dispatcher_ptr_queue_create_register(dispatch_target_t target, uint16_t queue_len) {
@@ -55,5 +57,13 @@ static inline void dispatcher_module_process_ptr_compat(dispatcher_module_t *mod
     if (module->process_msg) module->process_msg(&tmp);
     dispatcher_pool_msg_unref(pmsg);
 }
+
+/*
+ * Start a dispatcher module: create & register the pointer queue (if not set),
+ * initialize timing state, and spawn the standardized pointer-task that
+ * drives message unwrapping and step_frame scheduling.
+ * Returns pdTRUE on success, pdFALSE on failure.
+ */
+BaseType_t dispatcher_module_start(dispatcher_module_t *module);
 
 #endif // DISPATCHER_MODULE_H

@@ -74,24 +74,9 @@ static dispatcher_module_t line_sensor_window_mod = {
     .queue = NULL
 };
 
-static QueueHandle_t line_sensor_window_ptr_queue = NULL;
-
-static void line_sensor_window_ptr_task(void *arg) {
-    (void)arg;
-    while (1) {
-        pool_msg_t *pmsg = NULL;
-        if (xQueueReceive(line_sensor_window_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
-            dispatcher_module_process_ptr_compat(&line_sensor_window_mod, pmsg);
-        }
-    }
-}
-
 void mod_line_sensor_window_init(void) {
-    line_sensor_window_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_LINE_SENSOR_WINDOW, line_sensor_window_mod.queue_len);
-    if (!line_sensor_window_ptr_queue) {
-        ESP_LOGE(TAG, "Failed to create pointer queue for line_sensor_window");
+    if (dispatcher_module_start(&line_sensor_window_mod) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to start dispatcher module for line_sensor_window");
         return;
     }
-
-    xTaskCreate(line_sensor_window_ptr_task, "line_sensor_window_ptr_task", line_sensor_window_mod.stack_size, NULL, line_sensor_window_mod.task_prio, NULL);
 }

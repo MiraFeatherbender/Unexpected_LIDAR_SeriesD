@@ -72,4 +72,7 @@ void dispatcher_register_ptr_queue(dispatch_target_t target, QueueHandle_t queue
 int dispatcher_broadcast_ptr(pool_msg_t *msg, const dispatch_target_t *targets);
 bool dispatcher_has_ptr_queue(dispatch_target_t target);
 
+/* Return the registered pointer queue for a given target, or NULL if none. */
+QueueHandle_t dispatcher_get_ptr_queue(dispatch_target_t target);
+
 #endif // DISPATCHER_H

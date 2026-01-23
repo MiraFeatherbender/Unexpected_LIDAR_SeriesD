@@ -2,9 +2,9 @@
   "pools": {
     "streaming": {
       "F": 0.25,
-      "C": 2,
+      "C": 4,
       "payload_size": 64,
-      "min_entries": 8,
+      "min_entries": 16,
       "max_entries": 512
     },
     "control": {
