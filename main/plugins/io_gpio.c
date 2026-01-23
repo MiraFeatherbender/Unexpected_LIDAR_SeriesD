@@ -234,12 +234,15 @@ void io_gpio_event_task(void *arg) {
                 dispatcher_pool_type_t pool_type = (msg.source_id == SOURCE_MSC_BUTTON)
                     ? DISPATCHER_POOL_CONTROL
                     : DISPATCHER_POOL_STREAMING;
-                if (!dispatcher_pool_send_ptr(pool_type,
-                                              msg.source_id,
-                                              ptr_targets,
-                                              &msg.state,
-                                              1,
-                                              NULL)) {
+                dispatcher_pool_send_params_t params = {
+                    .type = pool_type,
+                    .source = msg.source_id,
+                    .targets = ptr_targets,
+                    .data = &msg.state,
+                    .data_len = 1,
+                    .context = NULL
+                };
+                if (!dispatcher_pool_send_ptr_params(&params)) {
                     ESP_LOGW(TAG, "Pool send failed for source %d", msg.source_id);
                 }
             }

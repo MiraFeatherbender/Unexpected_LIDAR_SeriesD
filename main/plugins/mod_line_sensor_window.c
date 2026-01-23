@@ -49,12 +49,15 @@ static void line_sensor_window_process_msg(const dispatcher_msg_t *msg) {
     size_t snapshot_len = 0;
     line_sensor_window_snapshot(snapshot, &snapshot_len);
 
-    if (!dispatcher_pool_send_ptr(DISPATCHER_POOL_STREAMING,
-                                  SOURCE_LINE_SENSOR_WINDOW,
-                                  targets,
-                                  snapshot,
-                                  snapshot_len,
-                                  NULL)) {
+    dispatcher_pool_send_params_t params = {
+        .type = DISPATCHER_POOL_STREAMING,
+        .source = SOURCE_LINE_SENSOR_WINDOW,
+        .targets = targets,
+        .data = snapshot,
+        .data_len = snapshot_len,
+        .context = NULL
+    };
+    if (!dispatcher_pool_send_ptr_params(&params)) {
         ESP_LOGW(TAG, "Pool send failed; dropping window msg");
     }
 }

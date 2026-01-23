@@ -50,18 +50,21 @@ static void lidar_task(void *arg)
 			dispatcher_msg_t out_msg = {0};
 			lidar_response_desc_t resp_desc = {0};
 			out_msg.source = SOURCE_LIDAR_COORD;
-				memset(out_msg.targets, TARGET_MAX, sizeof(out_msg.targets));
+			dispatcher_fill_targets(out_msg.targets);
 			switch(in->source) {
 					   case SOURCE_USB_CDC:
 						// Handle commands from USB (e.g., send Get Health to LIDAR)
 						out_msg.targets[0] = TARGET_LIDAR_IO;
 						out_msg.message_len = lidar_build_by_idx(out_msg.data, sizeof(out_msg.data), LIDAR_CMD_IDX_GET_INFO);
-						dispatcher_pool_send_ptr(DISPATCHER_POOL_CONTROL,
-										SOURCE_LIDAR_COORD,
-										out_msg.targets,
-										out_msg.data,
-										out_msg.message_len,
-										NULL);
+						dispatcher_pool_send_params_t params = {
+							.type = DISPATCHER_POOL_CONTROL,
+							.source = SOURCE_LIDAR_COORD,
+							.targets = out_msg.targets,
+							.data = out_msg.data,
+							.data_len = out_msg.message_len,
+							.context = NULL
+						};
+						dispatcher_pool_send_ptr_params(&params);
 						break;
 					case SOURCE_LIDAR_IO: {
 						// Handle responses from LIDAR IO (if needed)
@@ -88,24 +91,30 @@ static void lidar_task(void *arg)
 								char usb_buf[128];
 								entry->formatter(parsed_buf, usb_buf, sizeof(usb_buf), entry->struct_info);
 								out_msg.message_len = (uint16_t)strnlen(usb_buf, sizeof(usb_buf));
-								dispatcher_pool_send_ptr(DISPATCHER_POOL_CONTROL,
-											SOURCE_LIDAR_COORD,
-											out_msg.targets,
-											(const uint8_t *)usb_buf,
-											out_msg.message_len,
-											NULL);
+									dispatcher_pool_send_params_t params = {
+										.type = DISPATCHER_POOL_CONTROL,
+										.source = SOURCE_LIDAR_COORD,
+										.targets = out_msg.targets,
+										.data = (const uint8_t *)usb_buf,
+										.data_len = out_msg.message_len,
+										.context = NULL
+									};
+									dispatcher_pool_send_ptr_params(&params);
 								handled = true;
 							}
 						}
 						if (!handled) {
 							// Fallback: forward raw payload to USB
 							out_msg.message_len = in->message_len;
-							dispatcher_pool_send_ptr(DISPATCHER_POOL_CONTROL,
-										SOURCE_LIDAR_COORD,
-										out_msg.targets,
-										in->data,
-										out_msg.message_len,
-										NULL);
+								dispatcher_pool_send_params_t params = {
+									.type = DISPATCHER_POOL_CONTROL,
+									.source = SOURCE_LIDAR_COORD,
+									.targets = out_msg.targets,
+									.data = in->data,
+									.data_len = out_msg.message_len,
+									.context = NULL
+								};
+								dispatcher_pool_send_ptr_params(&params);
 						}
 						break;
 					}

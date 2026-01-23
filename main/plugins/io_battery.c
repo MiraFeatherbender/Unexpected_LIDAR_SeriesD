@@ -92,12 +92,15 @@ static void battery_process_msg(const dispatcher_msg_t *msg)
                 dispatcher_fill_targets(targets);
                 targets[0] = TARGET_LOG;
                 const char *txt = "Battery updates paused";
-                dispatcher_pool_send_ptr(DISPATCHER_POOL_CONTROL,
-                                         SOURCE_BATTERY,
-                                         targets,
-                                         (const uint8_t *)txt,
-                                         strlen(txt),
-                                         NULL);
+                dispatcher_pool_send_params_t params = {
+                    .type = DISPATCHER_POOL_CONTROL,
+                    .source = SOURCE_BATTERY,
+                    .targets = targets,
+                    .data = (const uint8_t *)txt,
+                    .data_len = strlen(txt),
+                    .context = NULL
+                };
+                dispatcher_pool_send_ptr_params(&params);
             }
             break;
         }
@@ -109,12 +112,15 @@ static void battery_process_msg(const dispatcher_msg_t *msg)
                 dispatcher_fill_targets(targets);
                 targets[0] = TARGET_LOG;
                 const char *txt = "Battery updates resumed";
-                dispatcher_pool_send_ptr(DISPATCHER_POOL_CONTROL,
-                                         SOURCE_BATTERY,
-                                         targets,
-                                         (const uint8_t *)txt,
-                                         strlen(txt),
-                                         NULL);
+                dispatcher_pool_send_params_t params = {
+                    .type = DISPATCHER_POOL_CONTROL,
+                    .source = SOURCE_BATTERY,
+                    .targets = targets,
+                    .data = (const uint8_t *)txt,
+                    .data_len = strlen(txt),
+                    .context = NULL
+                };
+                dispatcher_pool_send_ptr_params(&params);
             }
             break;
         }
@@ -243,12 +249,15 @@ static void battery_step_frame(void)
     dispatch_target_t rgb_targets[TARGET_MAX];
     dispatcher_fill_targets(rgb_targets);
     rgb_targets[0] = TARGET_RGB;
-    dispatcher_pool_send_ptr(DISPATCHER_POOL_STREAMING,
-                             SOURCE_BATTERY,
-                             rgb_targets,
-                             rgb_payload,
-                             sizeof(rgb_payload),
-                             NULL);
+    dispatcher_pool_send_params_t params = {
+        .type = DISPATCHER_POOL_STREAMING,
+        .source = SOURCE_BATTERY,
+        .targets = rgb_targets,
+        .data = rgb_payload,
+        .data_len = sizeof(rgb_payload),
+        .context = NULL
+    };
+    dispatcher_pool_send_ptr_params(&params);
 
     // // -----------------------------
     // // 2. SEND LOG TEXT MESSAGE (pointer pool)
@@ -267,10 +276,13 @@ static void battery_step_frame(void)
     // dispatch_target_t log_targets[TARGET_MAX];
     // dispatcher_fill_targets(log_targets);
     // log_targets[0] = TARGET_LOG;
-    // dispatcher_pool_send_ptr(DISPATCHER_POOL_STREAMING,
-    //                          SOURCE_BATTERY,
-    //                          log_targets,
-    //                          (const uint8_t *)log_buf,
-    //                          log_len,
-    //                          NULL);
+    // dispatcher_pool_send_params_t log_params = {
+    //     .type = DISPATCHER_POOL_STREAMING,
+    //     .source = SOURCE_BATTERY,
+    //     .targets = log_targets,
+    //     .data = (const uint8_t *)log_buf,
+    //     .data_len = log_len,
+    //     .context = NULL
+    // };
+    // dispatcher_pool_send_ptr_params(&log_params);
 }

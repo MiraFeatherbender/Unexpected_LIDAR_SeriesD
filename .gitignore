@@ -32,9 +32,8 @@ __pycache__/
 
 # VSCode settings (optional, if you want to keep your workspace private)
 .vscode/
-.defcontainer/
+.devcontainer/
 .examples/
-.references/
 
 # ESP-IDF Python environment (optional)
 .venv/

@@ -127,7 +127,7 @@ static int pool_init(dispatcher_pool_t *pool, const char *name, const pool_confi
         pool->entries[i].pool = pool;
         pool->entries[i].msg.data = pool->payload_region + (i * payload_size);
         pool->entries[i].msg.message_len = 0;
-        memset(pool->entries[i].msg.targets, TARGET_MAX, sizeof(pool->entries[i].msg.targets));
+        dispatcher_fill_targets(pool->entries[i].msg.targets);
         pool->entries[i].next = pool->free_list;
         pool->free_list = &pool->entries[i];
     }
@@ -195,7 +195,7 @@ pool_msg_t *dispatcher_pool_try_alloc(dispatcher_pool_type_t type) {
     memset(&msg->msg, 0, sizeof(msg->msg));
     msg->msg.data = payload;
     msg->msg.message_len = 0;
-    memset(msg->msg.targets, TARGET_MAX, sizeof(msg->msg.targets));
+    dispatcher_fill_targets(msg->msg.targets);
     return msg;
 }
 
@@ -235,7 +235,7 @@ pool_msg_t *dispatcher_pool_alloc_blocking(dispatcher_pool_type_t type, uint32_t
     memset(&msg->msg, 0, sizeof(msg->msg));
     msg->msg.data = payload;
     msg->msg.message_len = 0;
-    memset(msg->msg.targets, TARGET_MAX, sizeof(msg->msg.targets));
+    dispatcher_fill_targets(msg->msg.targets);
     return msg;
 }
 
@@ -344,7 +344,7 @@ void dispatcher_pool_self_test(void) {
                 size_t len = streaming_pool.payload_size > 8 ? 8 : streaming_pool.payload_size;
                 memset(pm->data, pattern, len);
                 pm->message_len = len;
-                memset(pm->targets, TARGET_MAX, sizeof(pm->targets));
+                dispatcher_fill_targets(pm->targets);
                 pm->targets[0] = TARGET_LOG;
 
                 int sent = dispatcher_broadcast_ptr(p, pm->targets);
@@ -388,32 +388,46 @@ pool_msg_t *dispatcher_pool_send_ptr(dispatcher_pool_type_t type,
                                      const uint8_t *data,
                                      size_t data_len,
                                      void *context) {
-    pool_msg_t *pmsg = dispatcher_pool_try_alloc(type);
+    dispatcher_pool_send_params_t params = {
+        .type = type,
+        .source = source,
+        .targets = targets,
+        .data = data,
+        .data_len = data_len,
+        .context = context
+    };
+    return dispatcher_pool_send_ptr_params(&params);
+}
+
+pool_msg_t *dispatcher_pool_send_ptr_params(const dispatcher_pool_send_params_t *params) {
+    if (!params) return NULL;
+
+    pool_msg_t *pmsg = dispatcher_pool_try_alloc(params->type);
     if (!pmsg) {
-        ESP_LOGW(TAG, "pool alloc failed for source %d", source);
+        ESP_LOGW(TAG, "pool alloc failed for source %d", params->source);
         return NULL;
     }
 
     dispatcher_msg_ptr_t *msg = dispatcher_pool_get_msg(pmsg);
     if (!msg || !msg->data) {
-        ESP_LOGW(TAG, "pool message missing payload for source %d", source);
+        ESP_LOGW(TAG, "pool message missing payload for source %d", params->source);
         dispatcher_pool_msg_unref(pmsg);
         return NULL;
     }
 
-    msg->source = source;
-    msg->context = context;
-    if (targets) {
-        memcpy(msg->targets, targets, sizeof(msg->targets));
+    msg->source = params->source;
+    msg->context = params->context;
+    if (params->targets) {
+        memcpy(msg->targets, params->targets, sizeof(msg->targets));
     } else {
-        memset(msg->targets, TARGET_MAX, sizeof(msg->targets));
+        dispatcher_fill_targets(msg->targets);
     }
 
-    size_t copy_len = data_len;
-    if (copy_len > 0 && msg->data && data) {
-        size_t max_len = (type == DISPATCHER_POOL_CONTROL) ? control_pool.payload_size : streaming_pool.payload_size;
+    size_t copy_len = params->data_len;
+    if (copy_len > 0 && msg->data && params->data) {
+        size_t max_len = (params->type == DISPATCHER_POOL_CONTROL) ? control_pool.payload_size : streaming_pool.payload_size;
         if (copy_len > max_len) copy_len = max_len;
-        memcpy(msg->data, data, copy_len);
+        memcpy(msg->data, params->data, copy_len);
     }
     msg->message_len = copy_len;
 

@@ -23,6 +23,15 @@ typedef enum {
     DISPATCHER_POOL_CONTROL = 1
 } dispatcher_pool_type_t;
 
+typedef struct {
+    dispatcher_pool_type_t type;
+    dispatch_source_t source;
+    const dispatch_target_t *targets;
+    const uint8_t *data;
+    size_t data_len;
+    void *context;
+} dispatcher_pool_send_params_t;
+
 int dispatcher_pool_init(void);
 
 pool_msg_t *dispatcher_pool_try_alloc(dispatcher_pool_type_t type);
@@ -44,6 +53,8 @@ pool_msg_t *dispatcher_pool_send_ptr(dispatcher_pool_type_t type,
                                      const uint8_t *data,
                                      size_t data_len,
                                      void *context);
+
+pool_msg_t *dispatcher_pool_send_ptr_params(const dispatcher_pool_send_params_t *params);
 
 #ifdef __cplusplus
 }

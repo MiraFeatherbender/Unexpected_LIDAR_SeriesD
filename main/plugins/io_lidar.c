@@ -86,12 +86,15 @@ void io_lidar_event_task(void *arg)
                     dispatch_target_t targets[TARGET_MAX];
                     dispatcher_fill_targets(targets);
                     targets[0] = TARGET_LIDAR_COORD;   // UART → LIDAR_COORD bridge
-                    dispatcher_pool_send_ptr(DISPATCHER_POOL_STREAMING,
-                                             SOURCE_LIDAR_IO,
-                                             targets,
-                                             tmp_buf,
-                                             (size_t)len,
-                                             NULL);
+                    dispatcher_pool_send_params_t params = {
+                        .type = DISPATCHER_POOL_STREAMING,
+                        .source = SOURCE_LIDAR_IO,
+                        .targets = targets,
+                        .data = tmp_buf,
+                        .data_len = (size_t)len,
+                        .context = NULL
+                    };
+                    dispatcher_pool_send_ptr_params(&params);
                 }
             }
         }

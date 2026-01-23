@@ -45,7 +45,7 @@ static void pool_test_tx_task(void *arg) {
             dispatcher_msg_ptr_t *msg = dispatcher_pool_get_msg(pmsg);
             if (msg && msg->data) {
                 msg->source = SOURCE_POOL_TEST;
-                memset(msg->targets, TARGET_MAX, sizeof(msg->targets));
+                dispatcher_fill_targets(msg->targets);
                 msg->targets[0] = TARGET_POOL_TEST;
                 msg->message_len = 8;
                 for (size_t i = 0; i < msg->message_len; ++i) {
