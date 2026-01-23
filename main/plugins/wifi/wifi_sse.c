@@ -18,12 +18,12 @@
 
 static const char *TAG = "wifi_sse";
 #define SSE_KEEPALIVE_MS 5000
-#define SSE_PTR_QUEUE_LEN 8
+#define SSE_PTR_QUEUE_LEN 16
 #define SSE_PTR_TASK_STACK 4096
 #define SSE_HEXBUF_LEN (32 * 3 + 1)
 #define SSE_B64BUF_LEN (((32 + 2) / 3 * 4) + 1)
-#define SSE_JSONBUF_LEN 1024
-#define SSE_JSON_RING_COUNT 4
+#define SSE_JSONBUF_LEN 2048
+#define SSE_JSON_RING_COUNT 6
 
 typedef struct sse_client {
     httpd_req_t *req;
@@ -35,10 +35,23 @@ static httpd_handle_t sse_server = NULL;
 static sse_client_t *clients = NULL;
 static SemaphoreHandle_t clients_mutex = NULL;
 static TaskHandle_t keepalive_task = NULL;
-static QueueHandle_t sse_ptr_queue = NULL;
 static SemaphoreHandle_t sse_json_mutex = NULL;
 static char *sse_json_ring[SSE_JSON_RING_COUNT] = {0};
 static size_t sse_json_ring_idx = 0;
+
+/* Dispatcher module for SSE pointer messages */
+static void wifi_sse_process_msg(const dispatcher_msg_t *msg);
+static dispatcher_module_t wifi_sse_mod = {
+    .name = "wifi_sse_ptr",
+    .target = TARGET_SSE,
+    .queue_len = SSE_PTR_QUEUE_LEN,
+    .stack_size = SSE_PTR_TASK_STACK,
+    .task_prio = tskIDLE_PRIORITY + 1,
+    .process_msg = wifi_sse_process_msg,
+    .step_frame = NULL,
+    .step_ms = 0,
+    .queue = NULL
+};
 
 static void *sse_alloc_psram(size_t size) {
     void *p = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -185,18 +198,9 @@ static void wifi_sse_dispatch_common(dispatch_source_t source,
     cJSON_Delete(root);
 }
 
-static void wifi_sse_ptr_task(void *arg) {
-    (void)arg;
-    while (1) {
-        pool_msg_t *pmsg = NULL;
-        if (xQueueReceive(sse_ptr_queue, &pmsg, portMAX_DELAY) == pdTRUE) {
-            const dispatcher_msg_ptr_t *pm = dispatcher_pool_get_msg_const(pmsg);
-            if (pm) {
-                wifi_sse_dispatch_common(pm->source, pm->targets, pm->data, pm->message_len);
-            }
-            dispatcher_pool_msg_unref(pmsg);
-        }
-    }
+static void wifi_sse_process_msg(const dispatcher_msg_t *msg) {
+    if (!msg) return;
+    wifi_sse_dispatch_common(msg->source, msg->targets, msg->data, msg->message_len);
 }
 
 /* Map textual CSV token to enum value. Called on connect only. */
@@ -469,15 +473,12 @@ esp_err_t wifi_sse_init(httpd_handle_t server) {
         return err;
     }
 
-    if (!sse_ptr_queue) {
-        sse_ptr_queue = dispatcher_ptr_queue_create_register(TARGET_SSE, SSE_PTR_QUEUE_LEN);
-        if (sse_ptr_queue) {
-            dispatcher_register_ptr_queue(TARGET_SSE_CONSOLE, sse_ptr_queue);
-            dispatcher_register_ptr_queue(TARGET_SSE_LINE_SENSOR, sse_ptr_queue);
-            xTaskCreate(wifi_sse_ptr_task, "wifi_sse_ptr_task", SSE_PTR_TASK_STACK, NULL, tskIDLE_PRIORITY + 1, NULL);
-        } else {
-            ESP_LOGW(TAG, "Failed to create SSE pointer queue");
-        }
+    if (dispatcher_module_start(&wifi_sse_mod) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to start dispatcher module for wifi_sse");
+    } else {
+        /* Register the same queue for additional SSE-related targets */
+        dispatcher_register_ptr_queue(TARGET_SSE_CONSOLE, wifi_sse_mod.queue);
+        dispatcher_register_ptr_queue(TARGET_SSE_LINE_SENSOR, wifi_sse_mod.queue);
     }
 
     ESP_LOGI(TAG, "SSE handlers registered on shared HTTP server");
@@ -486,9 +487,12 @@ esp_err_t wifi_sse_init(httpd_handle_t server) {
 
 esp_err_t wifi_sse_deinit(void) {
     sse_server = NULL;
-    if (sse_ptr_queue) {
-        vQueueDelete(sse_ptr_queue);
-        sse_ptr_queue = NULL;
+    if (wifi_sse_mod.queue) {
+        /* Unregister additional targets and delete the queue */
+        dispatcher_register_ptr_queue(TARGET_SSE_CONSOLE, NULL);
+        dispatcher_register_ptr_queue(TARGET_SSE_LINE_SENSOR, NULL);
+        vQueueDelete(wifi_sse_mod.queue);
+        wifi_sse_mod.queue = NULL;
     }
     if (sse_json_mutex) {
         xSemaphoreTake(sse_json_mutex, portMAX_DELAY);

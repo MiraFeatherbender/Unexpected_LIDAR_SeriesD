@@ -164,7 +164,8 @@ int dispatcher_pool_init(void) {
 
     dispatcher_pool_self_test();
 
-    // Start a low-priority periodic task to log pool stats every 10s.
+    // Periodic pool stats task disabled temporarily (was every 10s).
+#if 0
     BaseType_t ok = xTaskCreate(
         (TaskFunction_t)dispatcher_pool_stats_task,
         "dispatcher_pool_stats",
@@ -176,6 +177,7 @@ int dispatcher_pool_init(void) {
     if (ok != pdPASS) {
         ESP_LOGW(TAG, "Failed to create dispatcher_pool_stats task");
     }
+#endif
 
     return 0;
 }

@@ -12,6 +12,16 @@ static uint8_t line_sensor_window_buf[LINE_SENSOR_WINDOW_SIZE] = {0};
 static size_t line_sensor_window_head = 0;
 static size_t line_sensor_window_count = 0;
 
+/* Send every Nth snapshot to reduce dispatch pressure. 1 = every sample */
+static uint8_t line_sensor_window_snap_div = 2;
+static size_t line_sensor_window_snap_counter = 0;
+
+void mod_line_sensor_window_set_snapshot_div(uint8_t div) {
+    if (div == 0) div = 1;
+    line_sensor_window_snap_div = div;
+    ESP_LOGI(TAG, "snapshot divisor set to %u", (unsigned)div);
+}
+
 static void line_sensor_window_snapshot(uint8_t *out, size_t *out_len) {
     size_t count = line_sensor_window_count;
     if (count > LINE_SENSOR_WINDOW_SIZE) count = LINE_SENSOR_WINDOW_SIZE;
@@ -41,6 +51,12 @@ static void line_sensor_window_process_msg(const dispatcher_msg_t *msg) {
         line_sensor_window_count++;
     }
 
+    /* Throttle sending: only dispatch every Nth snapshot */
+    line_sensor_window_snap_counter = (line_sensor_window_snap_counter + 1) % line_sensor_window_snap_div;
+    if (line_sensor_window_snap_counter != 0) {
+        return; /* skip dispatch this sample */
+    }
+
     dispatch_target_t targets[TARGET_MAX];
     dispatcher_fill_targets(targets);
     targets[0] = TARGET_SSE_LINE_SENSOR;
@@ -65,7 +81,7 @@ static void line_sensor_window_process_msg(const dispatcher_msg_t *msg) {
 static dispatcher_module_t line_sensor_window_mod = {
     .name = "line_sensor_window_task",
     .target = TARGET_LINE_SENSOR_WINDOW,
-    .queue_len = 8,
+    .queue_len = 16,
     .stack_size = 4096,
     .task_prio = 9,
     .process_msg = line_sensor_window_process_msg,
