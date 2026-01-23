@@ -142,6 +142,108 @@ menu "Wi-Fi Access Point Settings"
 
 endmenu
 
+menu "Ultrasonic Distance Sensor"
+    config ULTRASONIC_TRIG_GPIO
+        int "Trigger (TX) GPIO pin"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 36
+        help
+            GPIO pin to use for the ultrasonic TRIG (TX) output. Default is 36.
+
+    config ULTRASONIC_ECHO_GPIO
+        int "Echo (RX) GPIO pin"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_IN_RANGE_MAX
+        default 34
+        help
+            GPIO pin to use for the ultrasonic ECHO (RX) input. Default is 34.
+
+    config ULTRASONIC_RMT_RESOLUTION_HZ
+        int "RMT tick resolution (Hz)"
+        default 17143
+        help
+            RMT resolution in Hz. 17143 gives ~58.333 µs ticks (1 tick ≈ 1 cm). For higher
+            precision use 1000000 (1 µs ticks).
+
+    config ULTRASONIC_TRIGGER_PULSE_US
+        int "Trigger pulse width (µs)"
+        default 10
+        help
+            Duration of the trigger pulse in microseconds (default 10 µs).
+
+    config ULTRASONIC_TRIGGER_INTERVAL_MS
+        int "Trigger interval (ms)"
+        default 100
+        help
+            Minimum time between trigger pulses in milliseconds.
+
+    config ULTRASONIC_SIGNAL_RANGE_MIN_CM
+        int "Minimum distance (cm)"
+        default 3
+        help
+            Minimum reliable distance in centimeters. Used to compute RMT receive min signal.
+
+    config ULTRASONIC_SIGNAL_RANGE_MAX_CM
+        int "Maximum distance (cm)"
+        default 250
+        help
+            Maximum reliable distance in centimeters. Used to compute RMT receive stop signal.
+
+    config ULTRASONIC_RMT_MEM_BLOCK_SYMBOLS
+        int "RMT memory block size (symbols)"
+        default 64
+        help
+            Number of RMT symbols to allocate for RX buffering. Increase for long frames.
+
+    choice
+        prompt "Ultrasonic filter type"
+        default ULTRASONIC_FILTER_MEDIAN
+        config ULTRASONIC_FILTER_NONE
+            bool "None"
+        config ULTRASONIC_FILTER_MEDIAN
+            bool "Median"
+        config ULTRASONIC_FILTER_AVG
+            bool "Moving average"
+        config ULTRASONIC_FILTER_EWMA
+            bool "EWMA (exponential)"
+    endchoice
+
+    # Per-filter parameter fields: each only appears when its corresponding filter is selected.
+    config ULTRASONIC_FILTER_PARAM_MEDIAN
+        int "Filter parameter (median window)"
+        depends on ULTRASONIC_FILTER_MEDIAN
+        default 3
+        help
+            Median filter window size (odd number recommended).
+
+    config ULTRASONIC_FILTER_PARAM_AVG
+        int "Filter parameter (moving average window)"
+        depends on ULTRASONIC_FILTER_AVG
+        default 3
+        help
+            Moving average window size. Larger values increase smoothing and latency.
+
+    config ULTRASONIC_FILTER_PARAM_EWMA
+        int "Filter parameter (EWMA alpha * 100)"
+        depends on ULTRASONIC_FILTER_EWMA
+        range 1 99
+        default 20
+        help
+            EWMA alpha times 100 (e.g., 20 => 0.20). Lower values increase smoothing.
+
+    config ULTRASONIC_TIMEOUT_MS
+        int "Echo timeout (ms)"
+        default 50
+        help
+            Maximum time to wait for an echo in milliseconds before timing out.
+
+    config ULTRASONIC_TEMP_COMPENSATION
+        bool "Enable temperature compensation for speed of sound"
+        default n
+        help
+            If enabled, the driver will adjust distance calculation based on ambient temperature.
+
+endmenu
+
 menu "Wi-Fi Station (STA) Settings"
     config WIFI_STA_SSID
         string "Wi-Fi STA SSID"
