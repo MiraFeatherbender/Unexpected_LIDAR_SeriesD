@@ -52,24 +52,10 @@ static void lidar_task(void *arg)
 			out_msg.source = SOURCE_LIDAR_COORD;
 			dispatcher_fill_targets(out_msg.targets);
 			switch(in->source) {
-					   case SOURCE_USB_CDC:
-						// Handle commands from USB (e.g., send Get Health to LIDAR)
-						out_msg.targets[0] = TARGET_LIDAR_IO;
-						out_msg.message_len = lidar_build_by_idx(out_msg.data, sizeof(out_msg.data), LIDAR_CMD_IDX_GET_INFO);
-						dispatcher_pool_send_params_t params = {
-							.type = DISPATCHER_POOL_CONTROL,
-							.source = SOURCE_LIDAR_COORD,
-							.targets = out_msg.targets,
-							.data = out_msg.data,
-							.data_len = out_msg.message_len,
-							.context = NULL
-						};
-						dispatcher_pool_send_ptr_params(&params);
-						break;
+
 					case SOURCE_LIDAR_IO: {
 						// Handle responses from LIDAR IO (if needed)
-						   out_msg.targets[0] = TARGET_SSE_CONSOLE;
-						   out_msg.targets[1] = TARGET_LOG;
+						   out_msg.targets[0] = TARGET_LOG;
 						if(in->data[0] != LIDAR_RSP_SYNC_BYTE1 || in->data[1] != LIDAR_RSP_SYNC_BYTE2) {
 							// Invalid response, ignore
 							break;
@@ -118,10 +104,22 @@ static void lidar_task(void *arg)
 						}
 						break;
 					}
-					default:
-						// Unknown source
+				default: {
+					// Treat any other source as a control request and forward GET_INFO to the LIDAR
+					out_msg.targets[0] = TARGET_LIDAR_IO;
+					out_msg.message_len = lidar_build_by_idx(out_msg.data, sizeof(out_msg.data), LIDAR_CMD_IDX_GET_INFO);
+					dispatcher_pool_send_params_t params = {
+						.type = DISPATCHER_POOL_CONTROL,
+						.source = SOURCE_LIDAR_COORD,
+						.targets = out_msg.targets,
+						.data = out_msg.data,
+						.data_len = out_msg.message_len,
+						.context = NULL
+					};
+					dispatcher_pool_send_ptr_params(&params);
 						break;
 				}
+			}
 			dispatcher_pool_msg_unref(pmsg);
 		}
 	}

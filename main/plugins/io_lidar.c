@@ -77,6 +77,7 @@ void io_lidar_event_task(void *arg)
         if (xQueueReceive(uart_event_queue, &event, portMAX_DELAY)) {
 
             if (event.type == UART_DATA) {
+                ESP_LOGI("io_lidar", "RX %u bytes", (unsigned)event.size);
                 uint8_t tmp_buf[BUF_SIZE] = {0};
                 int len = uart_read_bytes(CONFIG_EXAMPLE_UART_PORT_NUM,
                                           tmp_buf,
@@ -113,6 +114,7 @@ static void io_lidar_tx_task(void *arg)
                                  (const char *)msg->data,
                                  msg->message_len);
             }
+            ESP_LOGI("io_lidar", "TX %02X %02X", (unsigned)msg->data[0], (unsigned)msg->data[1]);
             dispatcher_pool_msg_unref(pmsg);
         }
     }

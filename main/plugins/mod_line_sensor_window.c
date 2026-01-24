@@ -13,7 +13,7 @@ static size_t line_sensor_window_head = 0;
 static size_t line_sensor_window_count = 0;
 
 /* Send every Nth snapshot to reduce dispatch pressure. 1 = every sample */
-static uint8_t line_sensor_window_snap_div = 2;
+static uint8_t line_sensor_window_snap_div = 1;
 static size_t line_sensor_window_snap_counter = 0;
 
 void mod_line_sensor_window_set_snapshot_div(uint8_t div) {
@@ -82,8 +82,8 @@ static dispatcher_module_t line_sensor_window_mod = {
     .name = "line_sensor_window_task",
     .target = TARGET_LINE_SENSOR_WINDOW,
     .queue_len = 16,
-    .stack_size = 4096,
-    .task_prio = 9,
+    .stack_size = 3072,
+    .task_prio = 8,
     .process_msg = line_sensor_window_process_msg,
     .step_frame = NULL,
     .step_ms = 0,
