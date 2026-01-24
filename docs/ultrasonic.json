@@ -4,12 +4,11 @@
     "echo_pin": 34,
     "timeout_ms": 25,
     "trigger_pulse_us": 10,
-    "interval_ms": 60,
+    "interval_ms": 100,
     "min_distance_cm": 3,
     "max_distance_cm": 250,
     "rmt_resolution_hz": 17143,
     "rmt_mem_block_symbols": 64,
-    "temp_compensation": false,
     "filter": {
       "type": "median",
       "window": 3

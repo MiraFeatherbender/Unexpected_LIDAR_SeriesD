@@ -17,6 +17,7 @@ void io_gpio_init(void) {
     gpio_event_queue = xQueueCreate(IO_GPIO_EVENT_QUEUE_LEN, sizeof(gpio_isr_msg_t));   
     gpio_install_isr_service(0); 
     setup_button();
+    gpio_dump_io_configuration(stdout, (1ULL << 0));
     setup_line_sensor();
     // setup_test_led();
 
@@ -140,7 +141,7 @@ void IRAM_ATTR line_sensor_gpio_isr(void *arg) {
 
 // Hardcoded setup for button on GPIO9
 void setup_button(void) {
-    static gpio_num_t pins[1] = {12};
+    static gpio_num_t pins[1] = {0};
     static isr_ctx_t ctx = {
         .pins = pins,
         .pin_count = 1,

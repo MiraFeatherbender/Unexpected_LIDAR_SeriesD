@@ -236,12 +236,6 @@ menu "Ultrasonic Distance Sensor"
         help
             Maximum time to wait for an echo in milliseconds before timing out.
 
-    config ULTRASONIC_TEMP_COMPENSATION
-        bool "Enable temperature compensation for speed of sound"
-        default n
-        help
-            If enabled, the driver will adjust distance calculation based on ambient temperature.
-
 endmenu
 
 menu "Wi-Fi Station (STA) Settings"

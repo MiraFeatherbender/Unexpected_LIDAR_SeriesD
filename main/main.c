@@ -4,6 +4,7 @@
 #include "dispatcher_pool.h"
 #include "dispatcher_pool_test.h"
 #include "io_usb_msc.h"
+#include "io_ultrasonic.h"
 #include "io_gpio.h"
 #include "io_lidar.h"
 #include "lidar_coordinator.h"
@@ -39,6 +40,7 @@ void app_main(void)
 
 
     io_usb_msc_init();
+    io_ultrasonic_init();
     dispatcher_allocator_init();
     dispatcher_pool_init();
 #ifdef CONFIG_DISPATCHER_POOL_TEST

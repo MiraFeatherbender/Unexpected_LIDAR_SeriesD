@@ -21,7 +21,8 @@ idf_component_register(
         "plugins/io_wifi_ap.c"
         "plugins/io_fatfs.c"
         "plugins/io_log.c"
-
+        "plugins/io_ultrasonic.c"
+        
         # Animation sources (auto-discovered)
         ${RGB_ANIMATION_SOURCES}
 
