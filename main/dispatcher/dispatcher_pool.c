@@ -1,5 +1,5 @@
 #include "dispatcher_pool.h"
-#include "plugins/dispatcher_allocator.h"
+#include "dispatcher_allocator.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"

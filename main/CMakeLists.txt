@@ -7,8 +7,10 @@ idf_component_register(
     SRCS
         "main.c"
         "dispatcher.c"
-        "dispatcher_pool.c"
-        "dispatcher_module.c"
+        "dispatcher/dispatcher_pool.c"
+        "dispatcher/dispatcher_module.c"
+        "dispatcher/dispatcher_allocator.c"
+        "dispatcher/dispatcher_pool_test.c"
 
         # Core plugin sources
         "plugins/io_gpio.c"
@@ -38,8 +40,6 @@ idf_component_register(
 
         # Modules
         "plugins/mod_line_sensor_window.c"
-        "plugins/dispatcher_allocator.c"
-        "plugins/dispatcher_pool_test.c"
 
     REQUIRES
         esp_wifi
@@ -49,6 +49,7 @@ idf_component_register(
         nvs_flash
         esp_driver_uart
         esp_driver_gpio
+        esp_driver_rmt
         esp_adc
         led_strip
         esp_driver_i2c
@@ -59,6 +60,7 @@ idf_component_register(
 
     INCLUDE_DIRS
         "."               # main/
+        "dispatcher"      # dispatcher*.h
         "plugins"         # io_*.h
         "plugins/rgb"     # rgb_anim*.h
         "plugins/RPLIDAR" # lidar_*.h
