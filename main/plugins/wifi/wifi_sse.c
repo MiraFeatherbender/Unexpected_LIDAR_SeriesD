@@ -18,7 +18,7 @@
 
 static const char *TAG = "wifi_sse";
 #define SSE_KEEPALIVE_MS 5000
-#define SSE_PTR_QUEUE_LEN 16
+#define SSE_PTR_QUEUE_LEN 32
 #define SSE_PTR_TASK_STACK 4096
 #define SSE_HEXBUF_LEN (32 * 3 + 1)
 #define SSE_B64BUF_LEN (((32 + 2) / 3 * 4) + 1)

@@ -81,7 +81,7 @@ static void line_sensor_window_process_msg(const dispatcher_msg_t *msg) {
 static dispatcher_module_t line_sensor_window_mod = {
     .name = "line_sensor_window_task",
     .target = TARGET_LINE_SENSOR_WINDOW,
-    .queue_len = 16,
+    .queue_len = 32,
     .stack_size = 3072,
     .task_prio = 8,
     .process_msg = line_sensor_window_process_msg,
