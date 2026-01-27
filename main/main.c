@@ -40,7 +40,6 @@ void app_main(void)
 
 
     io_usb_msc_init();
-    io_ultrasonic_init();
     dispatcher_allocator_init();
     dispatcher_pool_init();
 #ifdef CONFIG_DISPATCHER_POOL_TEST
@@ -49,6 +48,7 @@ void app_main(void)
     dispatcher_init();
     io_log_init();
     io_gpio_init();
+    io_ultrasonic_init();
     mod_line_sensor_window_init();
     io_lidar_init();
     lidar_coordinator_init();
