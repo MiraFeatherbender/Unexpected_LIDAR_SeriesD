@@ -63,6 +63,7 @@ void dispatcher_init(void);
 // Deprecated: use dispatcher_pool_send_ptr() and pointer queues instead.
 void dispatcher_send(const dispatcher_msg_t *msg);
 // Deprecated: use ISR -> queue -> task -> dispatcher_pool_send_ptr().
+
 void dispatcher_send_from_isr(const dispatcher_msg_t *msg,
                               BaseType_t *hp_task_woken);
 void dispatcher_register_handler(dispatch_target_t target,

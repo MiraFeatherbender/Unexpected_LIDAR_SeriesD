@@ -19,9 +19,13 @@ static void dispatcher_module_ptr_task(void *arg) {
 
     while (1) {
         TickType_t timeout = portMAX_DELAY;
+        TickType_t period = 0;
+
+        /* compute period and timeout if periodic stepping is enabled */
         if (module->step_ms > 0) {
+            period = pdMS_TO_TICKS(module->step_ms);
             if (module->next_step == 0) {
-                module->next_step = xTaskGetTickCount() + pdMS_TO_TICKS(module->step_ms);
+                module->next_step = xTaskGetTickCount() + period;
             }
             TickType_t now = xTaskGetTickCount();
             timeout = (module->next_step > now) ? (module->next_step - now) : 0;
@@ -38,18 +42,30 @@ static void dispatcher_module_ptr_task(void *arg) {
             }
         }
 
+        /* Receive and handle pointer messages */
         pool_msg_t *pmsg = NULL;
         if (xQueueReceive(module->queue, &pmsg, timeout) == pdTRUE) {
             dispatcher_module_process_ptr_compat(module, pmsg);
         }
 
-        if (module->step_frame && module->step_ms > 0) {
-            TickType_t now = xTaskGetTickCount();
-            if ((int32_t)(now - module->next_step) >= 0) {
-                module->step_frame();
-                module->next_step = now + pdMS_TO_TICKS(module->step_ms);
-            }
+        /* Flattened periodic handling: skip if no periodic step configured */
+        if (module->step_frame == NULL || module->step_ms == 0) {
+            continue;
         }
+
+        TickType_t now = xTaskGetTickCount();
+        if ((int32_t)(now - module->next_step) < 0) {
+            continue;
+        }
+
+        /* capture frame start explicitly and run step */
+        TickType_t frame_start = now;
+        module->step_frame();
+
+        /* Advance next_step by whole periods based on the frame start. */
+        do {
+            module->next_step += period;
+        } while ((int32_t)(frame_start - module->next_step) >= 0);
     }
 }
 

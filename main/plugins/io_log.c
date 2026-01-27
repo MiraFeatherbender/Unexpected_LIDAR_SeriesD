@@ -6,6 +6,12 @@
 static void io_log_process_msg(const dispatcher_msg_t *msg) {
     if (!msg) return;
     switch (msg->source) {
+        case SOURCE_ULTRASONIC:
+            // Log ultrasonic distance messages as 16-bit decimal
+            uint16_t distance_mm;
+            memcpy(&distance_mm, msg->data, sizeof(uint16_t));
+            ESP_LOGI("io_log", "Ultrasonic distance: %u mm", distance_mm);
+            break;
         case SOURCE_LINE_SENSOR_WINDOW:
         case SOURCE_LINE_SENSOR:
         case SOURCE_MSC_BUTTON: {
