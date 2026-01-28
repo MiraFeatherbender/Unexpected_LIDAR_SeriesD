@@ -12,11 +12,10 @@
 
 static const char *TAG = "io_ultrasonic";
 
-#define ULTRASONIC_MIN_PULSE_US  (20)     /* Minimum valid TX pulse (us) */
-#define ULTRASONIC_MIN_PULSE_US  (20)     /* Minimum valid TX pulse (us) */
+#define ULTRASONIC_MIN_PULSE_US  (10)     /* Minimum valid TX pulse (us) */
 
 /* Range clipping for distances (mm) */
-#define ULTRASONIC_MIN_MM  (30)  /* Clip anything < 30mm to 30mm */
+#define ULTRASONIC_MIN_MM  (20)  /* Clip anything < 20mm to 20mm */
 #define ULTRASONIC_MAX_MM  (450) /* Clip anything > 450mm to 450mm */
 
 /* Maximum echo round-trip time (us) for ULTRASONIC_MAX_MM
@@ -90,7 +89,7 @@ static dispatcher_module_t ultrasonic_mod = {
     .task_prio = 5,
     .process_msg = ultrasonic_process_msg,
     .step_frame = ultrasonic_step_frame,
-    .step_ms = 100,
+    .step_ms = 200,
     .queue = NULL,
     .next_step = 0,
     .last_queue_warn = 0
@@ -203,79 +202,66 @@ static void ultrasonic_event_task(void *arg)
         }
 
         uint64_t ts = cap.ts_us;
-        /* Clear stale rising timestamp if it's older than the max expected echo
-         * plus a margin. This prevents a lost falling edge from blocking future
-         * measurements indefinitely. */
-        if (last_rising_ts != 0 && ts > last_rising_ts &&
-            (ts - last_rising_ts) > (ULTRASONIC_MAX_DELTA_US + ULTRASONIC_DELTA_MARGIN_US)) {
-            ESP_LOGD(TAG, "Clearing stale rising ts (last=%llu now=%llu)", (unsigned long long)last_rising_ts, (unsigned long long)ts);
-            last_rising_ts = 0;
-        }
 
-        switch (cap.level) {
-        case 1: /* Rising edge */
+        if(cap.level){ /* Rising edge */
             last_rising_ts = ts;
-            ESP_LOGD(TAG, "RX rising edge ts=%llu", (unsigned long long)ts);
-            break;
+            continue;
+        }
 
-        case 0: { /* Falling edge (early-exit validation) */
-            if (last_rising_ts == 0) {
-                ESP_LOGD(TAG, "Ignoring falling edge without prior rising edge (falling=%llu)", (unsigned long long)ts);
-                break;
-            }
-            if (ts <= last_rising_ts) {
-                ESP_LOGD(TAG, "Ignoring falling edge with non-positive delta (rising=%llu falling=%llu)",
-                         (unsigned long long)last_rising_ts, (unsigned long long)ts);
-                break;
-            }
 
-            uint64_t delta_us = ts - last_rising_ts;
+        if (last_rising_ts == 0) {
+            ESP_LOGD(TAG, "Ignoring falling edge without prior rising edge (falling=%llu)", (unsigned long long)ts);
+            continue;
+        }
+        if (ts <= last_rising_ts) {
+            ESP_LOGD(TAG, "Ignoring falling edge with non-positive delta (rising=%llu falling=%llu)",
+                        (unsigned long long)last_rising_ts, (unsigned long long)ts);
+            continue;
+        }
 
-            /* Drop echoes that exceed the reliable max distance to avoid
-             * publishing unreliable readings. */
-            if (delta_us > ULTRASONIC_MAX_DELTA_US) {
-                ESP_LOGD(TAG, "Dropping echo: delta_us=%llu > max=%llu", (unsigned long long)delta_us, (unsigned long long)ULTRASONIC_MAX_DELTA_US);
-                last_rising_ts = 0;
-                break;
-            }
+        uint64_t delta_us = ts - last_rising_ts;
 
-            /* Distance (mm) = (delta_us * speed_of_sound_mm_per_s) / 2 / 1e6
-             * speed_of_sound = 343000 mm/s */
-            uint16_t distance_mm = (uint16_t)((delta_us * 343000ULL) / 2000000ULL);
-
-            /* Insert into sliding window */
-            window[win_idx] = distance_mm;
-            win_idx = (win_idx + 1) % 3;
-            if (win_count < 3) ++win_count;
-
-            /* Require a full 3-sample window; otherwise early-exit */
-            if (win_count != 3) {
-                /* Not enough samples yet; reset rising timestamp and continue */
-                last_rising_ts = 0;
-                break;
-            }
-
-            /* Compute median, clip to configured range, then publish */
-            uint16_t med = median3(window[0], window[1], window[2]);
-            if (med < ULTRASONIC_MIN_MM) med = ULTRASONIC_MIN_MM;
-            if (med > ULTRASONIC_MAX_MM) med = ULTRASONIC_MAX_MM;
-
-            /* Publish distance via dispatcher pointer-pool (TARGET_LOG only) */
-            dispatch_target_t targets[TARGET_MAX];
-            dispatcher_fill_targets(targets);
-            targets[0] = TARGET_LOG;
-
-            IO_ULTRASONIC_PUBLISH_MM(med, targets);
-
-            /* Reset last rising timestamp so we require a new rising edge */
+        /* Drop echoes that exceed the reliable max distance to avoid
+            * publishing unreliable readings. */
+        if (delta_us > ULTRASONIC_MAX_DELTA_US) {
+            ESP_LOGD(TAG, "Dropping echo: delta_us=%llu > max=%llu", (unsigned long long)delta_us, (unsigned long long)ULTRASONIC_MAX_DELTA_US);
             last_rising_ts = 0;
-            break;
+            continue;
         }
 
-        default:
-            ESP_LOGW(TAG, "Unknown GPIO level in capture: %u", (unsigned)cap.level);
-            break;
+        /* Distance (mm) = (delta_us * speed_of_sound_mm_per_s) / 2 / 1e6
+            * speed_of_sound = 343000 mm/s */
+        uint16_t distance_mm = (uint16_t)((delta_us * 343000ULL) / 2000000ULL);
+
+        /* Insert into sliding window */
+        window[win_idx] = distance_mm;
+        win_idx = (win_idx + 1) % 3;
+        if (win_count < 3) ++win_count;
+
+        /* Require a full 3-sample window; otherwise early-exit */
+        if (win_count != 3) {
+            /* Not enough samples yet; reset rising timestamp and continue */
+            last_rising_ts = 0;
+            continue;
         }
+
+        /* Compute median, clip to configured range, then publish */
+        uint16_t med = median3(window[0], window[1], window[2]);
+        if (med < ULTRASONIC_MIN_MM) med = ULTRASONIC_MIN_MM;
+        if (med > ULTRASONIC_MAX_MM) med = ULTRASONIC_MAX_MM;
+
+        /* Publish distance via dispatcher pointer-pool */
+        dispatch_target_t targets[TARGET_MAX];
+        dispatcher_fill_targets(targets);
+        targets[0] = TARGET_LOG;
+
+        IO_ULTRASONIC_PUBLISH_MM(med, targets);
+
+        /* Reset last rising timestamp so we require a new rising edge */
+        last_rising_ts = 0;
+        
+
+        
     }
 }
 

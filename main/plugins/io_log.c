@@ -8,9 +8,13 @@ static void io_log_process_msg(const dispatcher_msg_t *msg) {
     switch (msg->source) {
         case SOURCE_ULTRASONIC:
             // Log ultrasonic distance messages as 16-bit decimal
-            uint16_t distance_mm;
-            memcpy(&distance_mm, msg->data, sizeof(uint16_t));
-            ESP_LOGI("io_log", "Ultrasonic distance: %u mm", distance_mm);
+            size_t dec_len = msg->message_len;
+            if (dec_len > 32) dec_len = 32; // limit log size
+            char decbuf[32 * 3 + 1] = {0};
+            uint16_t val = (uint16_t)msg->data[0] | ((uint16_t)msg->data[1] << 8);
+            snprintf(decbuf, sizeof(decbuf), "%u ", val);
+            
+            ESP_LOGI("io_log", "Log message from ultrasonic sensor: %s mm", decbuf);
             break;
         case SOURCE_LINE_SENSOR_WINDOW:
         case SOURCE_LINE_SENSOR:
