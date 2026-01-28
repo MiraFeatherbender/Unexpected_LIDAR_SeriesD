@@ -50,7 +50,7 @@ idf_component_register(
         nvs_flash
         esp_driver_uart
         esp_driver_gpio
-        esp_driver_rmt
+        esp_driver_gptimer
         esp_adc
         led_strip
         esp_driver_i2c

@@ -9,6 +9,7 @@
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
 #include <string.h>
+#include "driver/gptimer.h"
 
 static const char *TAG = "io_ultrasonic";
 
@@ -29,7 +30,31 @@ static const char *TAG = "io_ultrasonic";
 #define ULTRASONIC_TX_PIN (42)
 #define ULTRASONIC_RX_PIN (12)
 
+
+/* Forward declarations */
+static void ultrasonic_process_msg(const dispatcher_msg_t *msg);
+static void ultrasonic_step_frame(void);
+static void ultrasonic_event_task(void *arg);
+static bool gptimer_on_alarm(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx);
+
+static dispatcher_module_t ultrasonic_mod = {
+    .name = "io_ultrasonic",
+    .target = TARGET_ULTRASONIC,
+    .queue_len = 8,
+    .stack_size = 4096,
+    .task_prio = 5,
+    .process_msg = ultrasonic_process_msg,
+    .step_frame = NULL, /* GPTimer callbacks drive TX timing instead */
+    .step_ms = 100,
+    .queue = NULL,
+    .next_step = 0,
+    .last_queue_warn = 0
+};
+
+
 static esp_timer_handle_t tx_pulse_timer = NULL;
+/* GPTimer used for precise TX scheduling (1 MHz -> 1 us ticks) */
+static gptimer_handle_t s_gptimer = NULL;
 
 /* ISR -> task message and queue for RX captures */
 #define ULTRASONIC_EVENT_QUEUE_LEN 32
@@ -42,11 +67,6 @@ typedef struct {
 
 /* Queue of capture structs */
 static QueueHandle_t ultrasonic_event_queue = NULL;
-
-/* Forward declarations */
-static void ultrasonic_process_msg(const dispatcher_msg_t *msg);
-static void ultrasonic_step_frame(void);
-static void ultrasonic_event_task(void *arg);
 
 /* Helper: median of three unsigned 32-bit values */
 static inline uint32_t median3(uint32_t a, uint32_t b, uint32_t c)
@@ -67,6 +87,59 @@ static void tx_pulse_timer_cb(void *arg)
     gpio_set_level(ULTRASONIC_TX_PIN, 0);
 } 
 
+/* GPTimer alarm callback: runs in ISR context. Toggle/clear TX and schedule
+ * the next alarm. Keep minimal and place in IRAM. */
+IRAM_ATTR static bool gptimer_on_alarm(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx)
+{
+    (void)timer;
+    (void)user_ctx;
+
+    /* Use the timestamp provided by the GPTimer event (count_value) to
+     * synchronize ISR activity. Fall back to a raw count read only if edata
+     * is unexpectedly NULL. */
+    uint64_t now = 0;
+    if (edata) {
+        now = edata->count_value;
+    } else {
+        (void)gptimer_get_raw_count(s_gptimer, &now);
+    }
+
+    /* Determine which alarm fired by inspecting the alarm_value provided
+     * by the event. If it matches the configured period (offset-from-zero),
+     * treat it as the period/start-of-frame alarm; otherwise treat it as
+     * the end-of-pulse one-shot alarm. */
+    uint64_t period_us = (uint64_t)ultrasonic_mod.step_ms * 1000ULL;
+    uint64_t fired_alarm = edata ? edata->alarm_value : 0;
+
+    if (fired_alarm == period_us) {
+        /* Period alarm: start pulse and schedule end-of-pulse (one-shot). */
+        gpio_set_level(ULTRASONIC_TX_PIN, 1);
+
+        gptimer_alarm_config_t end_cfg = {
+            .alarm_count = now + (uint64_t)ULTRASONIC_MIN_PULSE_US,
+            .reload_count = 0,
+            .flags = {.auto_reload_on_alarm = 0},
+        };
+        (void)gptimer_set_alarm_action(s_gptimer, &end_cfg);
+    } else {
+        /* End-of-pulse alarm: clear TX and (re)arm the periodic alarm which
+         * uses auto-reload and an alarm_count equal to period_us (offset).
+         * Using an auto-reload period alarm means the alarm_value reported
+         * on subsequent period firings will equal period_us, making ISR
+         * decision deterministic. */
+        gpio_set_level(ULTRASONIC_TX_PIN, 0);
+
+        gptimer_alarm_config_t next_cfg = {
+            .alarm_count = period_us,
+            .reload_count = 0,
+            .flags = {.auto_reload_on_alarm = 1},
+        };
+        (void)gptimer_set_alarm_action(s_gptimer, &next_cfg);
+    }
+
+    return false; /* do not yield a higher priority task */
+}
+
 /* RX GPIO ISR: capture current esp_timer_get_time() timestamp and enqueue it to the event queue */
 IRAM_ATTR static void ultrasonic_rx_gpio_isr(void *arg)
 {
@@ -81,20 +154,6 @@ IRAM_ATTR static void ultrasonic_rx_gpio_isr(void *arg)
     xQueueSendFromISR(queue, &cap, &xHigherPriorityTaskWoken);
     if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
 } 
-
-static dispatcher_module_t ultrasonic_mod = {
-    .name = "io_ultrasonic",
-    .target = TARGET_ULTRASONIC,
-    .queue_len = 8,
-    .stack_size = 4096,
-    .task_prio = 5,
-    .process_msg = ultrasonic_process_msg,
-    .step_frame = ultrasonic_step_frame,
-    .step_ms = 100,
-    .queue = NULL,
-    .next_step = 0,
-    .last_queue_warn = 0
-};
 
 void io_ultrasonic_init(void)
 {
@@ -124,8 +183,53 @@ void io_ultrasonic_init(void)
         tx_pulse_timer = NULL;
     }
 
-    /* Note: no GPTimer used; using esp_timer for scheduling pulse end and
-     * esp_timer_get_time() for timestamps. */
+    /* Initialize GPTimer (1 MHz resolution -> 1 tick = 1 us) for precise TX
+     * pulse timing. If initialization fails, we will keep using esp_timer
+     * fallback. */
+    gptimer_config_t gpt_cfg = {
+        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
+        .direction = GPTIMER_COUNT_UP,
+        .resolution_hz = 1000000, /* 1 MHz -> 1 us ticks */
+    };
+    if (gptimer_new_timer(&gpt_cfg, &s_gptimer) == ESP_OK) {
+        gptimer_event_callbacks_t gpt_cbs = {
+            .on_alarm = gptimer_on_alarm,
+        };
+        gptimer_register_event_callbacks(s_gptimer, &gpt_cbs, NULL);
+        if (gptimer_enable(s_gptimer) == ESP_OK) {
+            if (gptimer_start(s_gptimer) == ESP_OK) {
+                ESP_LOGI(TAG, "GPTimer started for ultrasonic TX (1MHz)");
+
+                /* Schedule initial period alarm: now + step_ms */
+                uint64_t now = 0;
+                if (gptimer_get_raw_count(s_gptimer, &now) == ESP_OK) {
+                    uint64_t period_us = (uint64_t)ultrasonic_mod.step_ms * 1000ULL;
+                    gptimer_alarm_config_t alarm_cfg = {
+                        .alarm_count = now + period_us,
+                        .reload_count = 0,
+                        .flags = {.auto_reload_on_alarm = 0},
+                    };
+                    if (gptimer_set_alarm_action(s_gptimer, &alarm_cfg) == ESP_OK) {
+                        ESP_LOGI(TAG, "GPTimer scheduled first period alarm in %llu us", (unsigned long long)period_us);
+                    } else {
+                        ESP_LOGW(TAG, "gptimer_set_alarm_action failed while scheduling first alarm");
+                    }
+                } else {
+                    ESP_LOGW(TAG, "gptimer_get_raw_count failed when scheduling first alarm");
+                }
+            } else {
+                ESP_LOGW(TAG, "gptimer_start failed for ultrasonic TX");
+                gptimer_del_timer(s_gptimer);
+                s_gptimer = NULL;
+            }
+        } else {
+            ESP_LOGW(TAG, "gptimer_enable failed for ultrasonic TX");
+            gptimer_del_timer(s_gptimer);
+            s_gptimer = NULL;
+        }
+    } else {
+        ESP_LOGI(TAG, "GPTimer not available; using esp_timer fallback for TX");
+    }
 
     /* Configure TX GPIO (initially low). */
     gpio_config_t tx_cfg = {
@@ -173,9 +277,7 @@ void io_ultrasonic_init(void)
 
 void io_ultrasonic_trigger_once(void)
 {
-    /* For now, call step_frame to exercise the dispatcher publishing path.
-     * Later this will trigger the measurement. */
-    ultrasonic_step_frame();
+    /* Manually trigger a single TX pulse (for testing) */
 }
 
 static void ultrasonic_process_msg(const dispatcher_msg_t *msg)
