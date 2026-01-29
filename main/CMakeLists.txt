@@ -40,6 +40,7 @@ idf_component_register(
         # Library sources
         "src/UMSeriesD_idf.c"
         "src/MCP23017.C"
+        "src/MCP23017_v2.c"
         
         # Modules
         "plugins/mod_line_sensor_window.c"
