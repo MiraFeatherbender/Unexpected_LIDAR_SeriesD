@@ -6,6 +6,7 @@
 #include "io_usb_msc.h"
 #include "io_ultrasonic.h"
 #include "io_gpio.h"
+#include "io_MCP23017.h"
 #include "io_lidar.h"
 #include "lidar_coordinator.h"
 #include "io_rgb.h"
@@ -46,6 +47,7 @@ void app_main(void)
     dispatcher_pool_test_init();
 #endif
     dispatcher_init();
+    io_MCP23017_start();
     io_log_init();
     io_gpio_init();
     io_ultrasonic_init();

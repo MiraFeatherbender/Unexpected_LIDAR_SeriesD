@@ -22,6 +22,7 @@ idf_component_register(
         "plugins/io_fatfs.c"
         "plugins/io_log.c"
         "plugins/io_ultrasonic.c"
+        "plugins/io_mcp23017.c"
         
         # Animation sources (auto-discovered)
         ${RGB_ANIMATION_SOURCES}
@@ -38,7 +39,8 @@ idf_component_register(
 
         # Library sources
         "src/UMSeriesD_idf.c"
-
+        "src/MCP23017.C"
+        
         # Modules
         "plugins/mod_line_sensor_window.c"
 
@@ -50,7 +52,7 @@ idf_component_register(
         nvs_flash
         esp_driver_uart
         esp_driver_gpio
-        esp_driver_rmt
+        esp_driver_i2c
         esp_adc
         led_strip
         esp_driver_i2c
