@@ -222,19 +222,6 @@ float ums3_get_light_sensor_voltage(void) {
 
 // -------- Fuel Gauge Setup --------
 void ums3_fg_setup(void) {
-    // I2C for battery gauge (MAX17048)
-    // // TODO: Migrate the following to new driver/i2c_master.h API
-    // i2c_config_t i2c_conf = {
-    //     .mode = I2C_MODE_MASTER,
-    //     .sda_io_num = CONFIG_UM_I2C_SDA_PIN,
-    //     .scl_io_num = CONFIG_UM_I2C_SCL_PIN,
-    //     .sda_pullup_en = GPIO_PULLUP_ENABLE,
-    //     .scl_pullup_en = GPIO_PULLUP_ENABLE,
-    //     .master.clk_speed = 400000
-    // };
-    // i2c_param_config(I2C_NUM_0, &i2c_conf); // <-- OLD I2C DRIVER USAGE
-    // i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0); // <-- OLD I2C DRIVER USAGE
-    // // (No gating needed, always available if I2C is present)
 
     // --- New I2C driver (driver/i2c_master.h) structure to fill in ---
     i2c_master_bus_config_t bus_config = {

@@ -25,7 +25,9 @@
 
 void app_main(void)
 {
+    ums3_set_ldo2_power(false);
     ums3_begin();
+    ums3_set_ldo2_power(true);
     ums3_set_pixel_brightness(0); // Turn off RGB initially
 #ifdef CONFIG_UM_ANTENNA_EXTERNAL
     ums3_set_antenna_external(CONFIG_UM_ANTENNA_EXTERNAL);

@@ -99,40 +99,24 @@ static void io_mcp23017_task(void *arg)
 {
     (void)arg;
     // Ensure an already-initialized I2C master bus is available (created elsewhere)
-    // i2c_master_bus_handle_t bus = NULL;
-    // int tries = 0;
-    // const int max_tries = 50; // ~10s
-    // while (i2c_master_get_bus_handle(I2C_NUM_0, &bus) != ESP_OK) {
-    //     if (++tries >= max_tries) break;
-    //     ESP_LOGI(TAG, "I2C bus not ready yet, retrying...");
-    //     vTaskDelay(pdMS_TO_TICKS(200));
-    // }
-    // if (!bus) {
-    //     ESP_LOGW(TAG, "I2C master bus not initialized; aborting MCP23017 polling task");
-    //     vTaskDelete(NULL);
-    //     return;
-    // }
+    i2c_master_bus_handle_t bus = NULL;
+    int tries = 0;
+    const int max_tries = 50; // ~10s
+    while (i2c_master_get_bus_handle(I2C_NUM_0, &bus) != ESP_OK) {
+        if (++tries >= max_tries) break;
+        ESP_LOGI(TAG, "I2C bus not ready yet, retrying...");
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
 
-    // uint8_t addrs[8];
-    // int found = 0;
-    // ESP_LOGI(TAG, "Scanning I2C bus for MCP23017... (0x20-0x27)");
-    // mcp23017_discover_bus(I2C_NUM_0, addrs, &found);
-    // if (found == 0) {
-    //     ESP_LOGW(TAG, "No MCP23017 devices found on I2C bus");
-    //     vTaskDelete(NULL);
-    //     return;
-    // }
-
-    // ESP_LOGI(TAG, "Found %d MCP23017 device(s), using first at 0x%02X", found, addrs[0]);
 
     mcp23017_config_t cfg = {0};
-    cfg.i2c_port = I2C_NUM_1;
-    cfg.sda_gpio = 34;
-    cfg.scl_gpio = 36;
-    cfg.i2c_freq_hz = 400000;
-    cfg.auto_discover = false;
-    cfg.addresses[0] = 0x27; // use first address
-    cfg.addr_count = 1;
+    // cfg.i2c_port = I2C_NUM_1;
+    // cfg.sda_gpio = 34;
+    // cfg.scl_gpio = 36;
+    // cfg.i2c_freq_hz = 400000;
+    cfg.auto_discover = true;
+    // cfg.addresses[0] = 0x27; // use first address
+    // cfg.addr_count = 1;
     cfg.bank_16bit = false; // sequential (BANK=0)
     cfg.seqop = false;
     cfg.odr = true;
