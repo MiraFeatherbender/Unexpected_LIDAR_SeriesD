@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "mcp23017_v2";
 
@@ -234,22 +235,41 @@ esp_err_t mcp23017_v2_auto_setup(mcp23017_v2_bundle_t *out_bundle, bool apply_de
     if (!out_bundle) return ESP_ERR_INVALID_ARG;
     memset(out_bundle, 0, sizeof(*out_bundle));
 
+    const int AUTO_SETUP_RETRIES = 50;
+    const int AUTO_SETUP_DELAY_MS = 200;
+
     // Try to obtain an existing I2C master bus handle (prefer I2C_NUM_0 then I2C_NUM_1)
     i2c_master_bus_handle_t bus = NULL;
-    if (i2c_master_get_bus_handle(I2C_NUM_0, &bus) != ESP_OK) {
-        if (i2c_master_get_bus_handle(I2C_NUM_1, &bus) != ESP_OK) {
-            ESP_LOGW(TAG, "No existing I2C master bus found (tried 0 and 1)");
-            return ESP_ERR_NOT_FOUND;
-        }
+    int attempt = 0;
+    while (attempt < AUTO_SETUP_RETRIES) {
+        if (i2c_master_get_bus_handle(I2C_NUM_0, &bus) == ESP_OK) break;
+        if (i2c_master_get_bus_handle(I2C_NUM_1, &bus) == ESP_OK) break;
+        attempt++;
+        if (attempt >= AUTO_SETUP_RETRIES) break;
+        ESP_LOGI(TAG, "mcp23017_v2: waiting for I2C bus (attempt %d/%d)", attempt+1, AUTO_SETUP_RETRIES);
+        vTaskDelay(pdMS_TO_TICKS(AUTO_SETUP_DELAY_MS));
+    }
+    if (!bus) {
+        ESP_LOGW(TAG, "No existing I2C master bus found after %d attempt(s)", AUTO_SETUP_RETRIES);
+        return ESP_ERR_NOT_FOUND;
     }
 
     uint8_t addrs[8];
     i2c_master_dev_handle_t devs[8];
     int found = 0;
-    esp_err_t r = v2_discover_devices_on_bus(bus, addrs, devs, &found);
-    if (r != ESP_OK) return r;
+    esp_err_t r = ESP_OK;
+    attempt = 0;
+    while (attempt < AUTO_SETUP_RETRIES) {
+        r = v2_discover_devices_on_bus(bus, addrs, devs, &found);
+        if (r != ESP_OK) return r;
+        if (found > 0) break;
+        attempt++;
+        if (attempt >= AUTO_SETUP_RETRIES) break;
+        ESP_LOGI(TAG, "mcp23017_v2: no devices found, retrying discovery (%d/%d)", attempt+1, AUTO_SETUP_RETRIES);
+        vTaskDelay(pdMS_TO_TICKS(AUTO_SETUP_DELAY_MS));
+    }
     if (found == 0) {
-        ESP_LOGI(TAG, "No MCP23017 devices discovered on bus");
+        ESP_LOGI(TAG, "No MCP23017 devices discovered on bus after %d attempt(s)", AUTO_SETUP_RETRIES);
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -281,4 +301,326 @@ esp_err_t mcp23017_v2_auto_setup(mcp23017_v2_bundle_t *out_bundle, bool apply_de
 
     ESP_LOGI(TAG, "v2: discovered %d MCP23017 device(s)", found);
     return ESP_OK;
+}
+
+// Interrupt helpers
+esp_err_t mcp23017_v2_set_interrupt_mode(mcp23017_v2_handle_t h, int dev_idx, mcp23017_port_t port, uint8_t mask, mcp23017_int_mode_t mode)
+{
+    if (!h || dev_idx < 0 || dev_idx >= h->addr_count) return ESP_ERR_INVALID_ARG;
+    uint8_t reg_gpinten = (port==MCP_PORT_A)?MCP_REG_GPINTENA:MCP_REG_GPINTENB;
+    uint8_t reg_intcon  = (port==MCP_PORT_A)?MCP_REG_INTCONA:MCP_REG_INTCONB;
+    uint8_t reg_defval  = (port==MCP_PORT_A)?MCP_REG_DEFVALA:MCP_REG_DEFVALB;
+
+    uint8_t cur_gpinten=0, cur_intcon=0, cur_defval=0;
+    esp_err_t r;
+    r = mcp23017_v2_reg_read8(h, dev_idx, reg_gpinten, &cur_gpinten);
+    if (r != ESP_OK) return r;
+    r = mcp23017_v2_reg_read8(h, dev_idx, reg_intcon, &cur_intcon);
+    if (r != ESP_OK) return r;
+    r = mcp23017_v2_reg_read8(h, dev_idx, reg_defval, &cur_defval);
+    if (r != ESP_OK) return r;
+
+    switch (mode) {
+        case MCP_INT_ANYEDGE:
+            // INTCON bits = 0 (compare to previous), enable bits in GPINTEN
+            cur_intcon &= (uint8_t)(~mask);
+            cur_gpinten |= mask;
+            break;
+        case MCP_INT_POSEDGE:
+            // INTCON bits = 1 (compare to DEFVAL), DEFVAL bits = 0 => rising edge
+            cur_intcon |= mask;
+            cur_defval &= (uint8_t)(~mask);
+            cur_gpinten |= mask;
+            break;
+        case MCP_INT_NEGEDGE:
+            // INTCON bits = 1, DEFVAL bits = 1 => falling edge
+            cur_intcon |= mask;
+            cur_defval |= mask;
+            cur_gpinten |= mask;
+            break;
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
+
+    // Write back DEFVAL, INTCON, GPINTEN (order shouldn't matter much)
+    r = mcp23017_v2_reg_write8(h, dev_idx, reg_defval, cur_defval);
+    if (r != ESP_OK) return r;
+    r = mcp23017_v2_reg_write8(h, dev_idx, reg_intcon, cur_intcon);
+    if (r != ESP_OK) return r;
+    r = mcp23017_v2_reg_write8(h, dev_idx, reg_gpinten, cur_gpinten);
+    return r;
+}
+
+esp_err_t mcp23017_v2_set_int_polarity(mcp23017_v2_handle_t h, int dev_idx, mcp23017_int_polarity_t polarity)
+{
+    if (!h || dev_idx < 0 || dev_idx >= h->addr_count) return ESP_ERR_INVALID_ARG;
+    uint8_t iocon = 0;
+    esp_err_t r = mcp23017_v2_reg_read8(h, dev_idx, MCP_REG_IOCON, &iocon);
+    if (r != ESP_OK) return r;
+    const uint8_t INTPOL_BIT = 0x02; // IOCON.INTPOL
+    const uint8_t ODR_BIT    = 0x04; // IOCON.ODR (open-drain)
+
+    switch (polarity) {
+        case MCP_INT_ACTIVE_LOW:
+            iocon &= (uint8_t)~INTPOL_BIT;
+            iocon &= (uint8_t)~ODR_BIT;
+            break;
+        case MCP_INT_ACTIVE_HIGH:
+            iocon |= INTPOL_BIT;
+            iocon &= (uint8_t)~ODR_BIT;
+            break;
+        case MCP_INT_OPENDRAIN:
+            // Open-drain active-low by default
+            iocon &= (uint8_t)~INTPOL_BIT;
+            iocon |= ODR_BIT;
+            break;
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
+
+    return mcp23017_v2_reg_write8(h, dev_idx, MCP_REG_IOCON, iocon);
+}
+
+// Configure a port (mask) with combined settings: direction, pull-up, interrupt mode/polarity, and initial level for outputs.
+// If cfg->flags has MCP_CFG_BATCH_WRITE set, attempt a sequential read of registers 0x00..0x15, modify relevant bytes,
+// and write them back in a single sequential write. Falls back to individual register RMW calls.
+esp_err_t mcp23017_v2_config_port(mcp23017_v2_handle_t h, int dev_idx, const mcp23017_pin_cfg_t *cfg)
+{
+    if (!h || !cfg) return ESP_ERR_INVALID_ARG;
+    if (dev_idx < 0 || dev_idx >= h->addr_count) return ESP_ERR_INVALID_ARG;
+
+    i2c_master_dev_handle_t dev = (i2c_master_dev_handle_t)h->dev_handles[dev_idx];
+
+    uint8_t iodir_reg = (cfg->port==MCP_PORT_A)?MCP_REG_IODIRA:MCP_REG_IODIRB;
+    uint8_t gppu_reg  = (cfg->port==MCP_PORT_A)?MCP_REG_GPPUA:MCP_REG_GPPUB;
+    uint8_t olat_reg  = (cfg->port==MCP_PORT_A)?MCP_REG_OLATA:MCP_REG_OLATB;
+    uint8_t intcon_reg= (cfg->port==MCP_PORT_A)?MCP_REG_INTCONA:MCP_REG_INTCONB;
+    uint8_t defval_reg= (cfg->port==MCP_PORT_A)?MCP_REG_DEFVALA:MCP_REG_DEFVALB;
+
+    // If batching requested, attempt block read-modify-write
+    if (cfg->flags & MCP_CFG_BATCH_WRITE) {
+        const uint8_t start_reg = 0x00;
+        const size_t n = 0x16; // 0x00..0x15 inclusive
+        uint8_t *buf = malloc(n);
+        if (!buf) return ESP_ERR_NO_MEM;
+        esp_err_t r = i2c_master_transmit_receive(dev, &start_reg, 1, buf, n, pdMS_TO_TICKS(300));
+        if (r == ESP_OK) {
+            // Modify IODIR
+            uint8_t cur_iodir = buf[iodir_reg];
+            if (cfg->pin_mode == MCP_PIN_INPUT) cur_iodir |= cfg->mask; else cur_iodir &= (uint8_t)(~cfg->mask);
+            buf[iodir_reg] = cur_iodir;
+            // Modify GPPU
+            uint8_t cur_gppu = buf[gppu_reg];
+            if (cfg->pullup == MCP_PULLUP_ENABLE) cur_gppu |= cfg->mask; else cur_gppu &= (uint8_t)(~cfg->mask);
+            buf[gppu_reg] = cur_gppu;
+            // Modify OLAT for initial outputs
+            uint8_t cur_olat = buf[olat_reg];
+            cur_olat = (cur_olat & (uint8_t)(~cfg->mask)) | (cfg->initial_level & cfg->mask);
+            buf[olat_reg] = cur_olat;
+            // Modify INTCON/DEFVAL if interrupt mode requested
+            if (cfg->int_mode != MCP_INT_NONE) {
+                uint8_t cur_intcon = buf[intcon_reg];
+                uint8_t cur_defval = buf[defval_reg];
+                switch (cfg->int_mode) {
+                    case MCP_INT_ANYEDGE:
+                        cur_intcon &= (uint8_t)(~cfg->mask);
+                        break;
+                    case MCP_INT_POSEDGE:
+                        cur_intcon |= cfg->mask;
+                        cur_defval &= (uint8_t)(~cfg->mask);
+                        break;
+                    case MCP_INT_NEGEDGE:
+                        cur_intcon |= cfg->mask;
+                        cur_defval |= cfg->mask;
+                        break;
+                    default:
+                        break;
+                }
+                buf[intcon_reg] = cur_intcon;
+                buf[defval_reg] = cur_defval;
+                // Also ensure GPINTEN bits enabled for mask
+                uint8_t gpinten_reg = (cfg->port==MCP_PORT_A)?MCP_REG_GPINTENA:MCP_REG_GPINTENB;
+                buf[gpinten_reg] |= cfg->mask;
+            }
+
+            // Write back sequentially: prepend start reg
+            uint8_t *w = malloc(n + 1);
+            if (!w) { free(buf); return ESP_ERR_NO_MEM; }
+            w[0] = start_reg;
+            memcpy(w + 1, buf, n);
+            r = i2c_master_transmit(dev, w, n + 1, pdMS_TO_TICKS(500));
+            free(w);
+            free(buf);
+            if (r == ESP_OK) {
+                // configure polarity if requested
+                if (cfg->int_polarity != MCP_INT_POL_NONE) {
+                    return mcp23017_v2_set_int_polarity(h, dev_idx, cfg->int_polarity);
+                }
+                return ESP_OK;
+            }
+            // fall through to per-register path on failure
+        } else {
+            free(buf);
+            // fall through to per-register path
+        }
+    }
+
+    // Fallback: per-register RMW using existing helpers
+    esp_err_t r;
+    // direction
+    uint8_t cur_dir = 0;
+    r = mcp23017_v2_reg_read8(h, dev_idx, iodir_reg, &cur_dir);
+    if (r != ESP_OK) return r;
+    uint8_t next_dir = (cfg->pin_mode == MCP_PIN_INPUT) ? (cur_dir | cfg->mask) : (cur_dir & (uint8_t)(~cfg->mask));
+    r = mcp23017_v2_reg_write8(h, dev_idx, iodir_reg, next_dir);
+    if (r != ESP_OK) return r;
+
+    // pull-ups
+    uint8_t cur_gppu = 0;
+    r = mcp23017_v2_reg_read8(h, dev_idx, gppu_reg, &cur_gppu);
+    if (r != ESP_OK) return r;
+    uint8_t next_gppu = (cfg->pullup == MCP_PULLUP_ENABLE) ? (cur_gppu | cfg->mask) : (cur_gppu & (uint8_t)(~cfg->mask));
+    r = mcp23017_v2_reg_write8(h, dev_idx, gppu_reg, next_gppu);
+    if (r != ESP_OK) return r;
+
+    // initial outputs (OLAT)
+    if (cfg->pin_mode == MCP_PIN_OUTPUT) {
+        uint8_t cur_olat = 0;
+        r = mcp23017_v2_reg_read8(h, dev_idx, olat_reg, &cur_olat);
+        if (r != ESP_OK) return r;
+        uint8_t next_olat = (cur_olat & (uint8_t)(~cfg->mask)) | (cfg->initial_level & cfg->mask);
+        r = mcp23017_v2_reg_write8(h, dev_idx, olat_reg, next_olat);
+        if (r != ESP_OK) return r;
+    }
+
+    // interrupts
+    if (cfg->int_mode != MCP_INT_NONE) {
+        r = mcp23017_v2_set_interrupt_mode(h, dev_idx, cfg->port, cfg->mask, cfg->int_mode);
+        if (r != ESP_OK) return r;
+    }
+    if (cfg->int_polarity != MCP_INT_POL_NONE) {
+        r = mcp23017_v2_set_int_polarity(h, dev_idx, cfg->int_polarity);
+        if (r != ESP_OK) return r;
+    }
+
+    return ESP_OK;
+}
+
+// ----------------------- ISR registry (GPIO -> worker tasks) -----------------------
+#define MCP_ISR_MAX_GPIO 40
+#define MCP_ISR_MAX_WORKERS 8
+
+typedef struct {
+    bool handler_added[MCP_ISR_MAX_GPIO];
+    TaskHandle_t workers[MCP_ISR_MAX_GPIO][MCP_ISR_MAX_WORKERS];
+    uint8_t worker_count[MCP_ISR_MAX_GPIO];
+    uint32_t hits[MCP_ISR_MAX_GPIO];
+    SemaphoreHandle_t lock;
+} isr_registry_t;
+
+static isr_registry_t s_isr_registry = { .lock = NULL };
+
+static void IRAM_ATTR mcp23017_isr_common(void *arg)
+{
+    int gpio = (int)(intptr_t)arg;
+    BaseType_t xHigher = pdFALSE;
+    if (gpio < 0 || gpio >= MCP_ISR_MAX_GPIO) return;
+    // increment hit counter (race acceptable for diagnostics)
+    s_isr_registry.hits[gpio]++;
+    uint8_t cnt = s_isr_registry.worker_count[gpio];
+    for (uint8_t i = 0; i < cnt; ++i) {
+        TaskHandle_t t = s_isr_registry.workers[gpio][i];
+        if (t) vTaskNotifyGiveFromISR(t, &xHigher);
+    }
+    if (xHigher == pdTRUE) portYIELD_FROM_ISR();
+}
+
+esp_err_t mcp23017_isr_register(const mcp23017_isr_cfg_t *cfg, TaskHandle_t worker_task)
+{
+    if (!cfg || worker_task == NULL) return ESP_ERR_INVALID_ARG;
+    int g = (int)cfg->int_gpio;
+    if (g < 0 || g >= MCP_ISR_MAX_GPIO) return ESP_ERR_INVALID_ARG;
+
+    // lazy-init lock
+    if (!s_isr_registry.lock) {
+        s_isr_registry.lock = xSemaphoreCreateMutex();
+        if (!s_isr_registry.lock) return ESP_ERR_NO_MEM;
+    }
+
+    if (xSemaphoreTake(s_isr_registry.lock, pdMS_TO_TICKS(200)) != pdTRUE) return ESP_ERR_TIMEOUT;
+
+    // avoid duplicates
+    for (uint8_t i = 0; i < s_isr_registry.worker_count[g]; ++i) {
+        if (s_isr_registry.workers[g][i] == worker_task) {
+            xSemaphoreGive(s_isr_registry.lock);
+            return ESP_OK;
+        }
+    }
+
+    if (s_isr_registry.worker_count[g] >= MCP_ISR_MAX_WORKERS) {
+        xSemaphoreGive(s_isr_registry.lock);
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Configure GPIO if handler not present
+    if (!s_isr_registry.handler_added[g]) {
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << g),
+            .mode = GPIO_MODE_INPUT,
+            .intr_type = cfg->intr_type,
+            .pull_up_en = (cfg->pull_mode == GPIO_PULLUP_ONLY) ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE,
+            .pull_down_en = (cfg->pull_mode == GPIO_PULLDOWN_ONLY) ? GPIO_PULLDOWN_ENABLE : GPIO_PULLDOWN_DISABLE,
+        };
+        gpio_config(&io_conf);
+        if (cfg->install_isr_service == MCP_ISR_SERVICE_YES) {
+            gpio_install_isr_service(0);
+        }
+        gpio_isr_handler_add((gpio_num_t)g, mcp23017_isr_common, (void*)(intptr_t)g);
+        s_isr_registry.handler_added[g] = true;
+    }
+
+    // add worker
+    s_isr_registry.workers[g][s_isr_registry.worker_count[g]++] = worker_task;
+
+    xSemaphoreGive(s_isr_registry.lock);
+    return ESP_OK;
+}
+
+esp_err_t mcp23017_isr_unregister(const mcp23017_isr_cfg_t *cfg, TaskHandle_t worker_task)
+{
+    if (!cfg || worker_task == NULL) return ESP_ERR_INVALID_ARG;
+    int g = (int)cfg->int_gpio;
+    if (g < 0 || g >= MCP_ISR_MAX_GPIO) return ESP_ERR_INVALID_ARG;
+    if (!s_isr_registry.lock) return ESP_ERR_INVALID_STATE;
+
+    if (xSemaphoreTake(s_isr_registry.lock, pdMS_TO_TICKS(200)) != pdTRUE) return ESP_ERR_TIMEOUT;
+
+    bool found = false;
+    uint8_t cnt = s_isr_registry.worker_count[g];
+    for (uint8_t i = 0; i < cnt; ++i) {
+        if (s_isr_registry.workers[g][i] == worker_task) {
+            // shift remaining
+            for (uint8_t j = i; j + 1 < cnt; ++j) s_isr_registry.workers[g][j] = s_isr_registry.workers[g][j+1];
+            s_isr_registry.workers[g][cnt-1] = NULL;
+            s_isr_registry.worker_count[g]--;
+            found = true;
+            break;
+        }
+    }
+
+    // if no workers left, remove handler
+    if (s_isr_registry.worker_count[g] == 0 && s_isr_registry.handler_added[g]) {
+        gpio_isr_handler_remove((gpio_num_t)g);
+        s_isr_registry.handler_added[g] = false;
+    }
+
+    xSemaphoreGive(s_isr_registry.lock);
+    return found ? ESP_OK : ESP_ERR_NOT_FOUND;
+}
+
+uint32_t mcp23017_isr_get_hits(gpio_num_t int_gpio)
+{
+    int g = (int)int_gpio;
+    if (g < 0 || g >= MCP_ISR_MAX_GPIO) return 0;
+    return s_isr_registry.hits[g];
 }

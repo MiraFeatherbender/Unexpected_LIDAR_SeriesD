@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include "esp_err.h"
 #include "driver/i2c_types.h"
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 // Port enums
 typedef enum {
@@ -25,6 +28,7 @@ typedef enum {
 
 // Interrupt/shorthand modes
 typedef enum {
+    MCP_INT_NONE = -1,
     MCP_INT_ANYEDGE = 0,
     MCP_INT_POSEDGE = 1,
     MCP_INT_NEGEDGE = 2,
@@ -32,6 +36,7 @@ typedef enum {
 
 // Interrupt polarity / output type
 typedef enum {
+    MCP_INT_POL_NONE = -1,
     MCP_INT_ACTIVE_LOW = 0,
     MCP_INT_ACTIVE_HIGH = 1,
     MCP_INT_OPENDRAIN = 2,
@@ -65,6 +70,27 @@ typedef enum {
 
 // Version helper
 const char *mcp23017_v2_version(void);
+
+// Pin mode (mirror of MCU gpio direction semantics)
+typedef enum {
+    MCP_PIN_INPUT = 0,
+    MCP_PIN_OUTPUT = 1,
+} mcp23017_pin_mode_t;
+
+// Pin configuration struct for port-level configuration
+typedef struct {
+    mcp23017_port_t port;       // MCP_PORT_A or MCP_PORT_B
+    uint8_t mask;               // bitmask of pins within port
+    mcp23017_pin_mode_t pin_mode; // INPUT or OUTPUT
+    mcp23017_pull_t pullup;     // pull-up enable/disable
+    mcp23017_int_mode_t int_mode; // interrupt mode or MCP_INT_NONE
+    mcp23017_int_polarity_t int_polarity; // desired polarity or MCP_INT_POL_NONE
+    uint8_t initial_level;      // levels to apply for outputs (bits valid where mask=1)
+    uint32_t flags;             // configuration flags (see MCP_CFG_*)
+} mcp23017_pin_cfg_t;
+
+// Flags for mcp23017_pin_cfg_t.flags
+#define MCP_CFG_BATCH_WRITE (1u << 0) // perform a batched RMW using sequential access
 
 // High-level 8-bit port helpers (v2)
 // port: MCP_PORT_A or MCP_PORT_B
@@ -103,3 +129,46 @@ esp_err_t mcp23017_v2_reg_write8(mcp23017_v2_handle_t h, int dev_idx, uint8_t re
 // Lifecycle
 esp_err_t mcp23017_v2_delete(mcp23017_v2_handle_t h);
 
+// Interrupt helpers
+// mode: MCP_INT_ANYEDGE, MCP_INT_POSEDGE, MCP_INT_NEGEDGE
+esp_err_t mcp23017_v2_set_interrupt_mode(mcp23017_v2_handle_t h, int dev_idx, mcp23017_port_t port, uint8_t mask, mcp23017_int_mode_t mode);
+
+// Configure INT output polarity/drive type. For MCP_INT_OPENDRAIN the helper will set the
+// IOCON ODR bit and leave INTPOL cleared (open-drain active-low). ACTIVE_HIGH/A_ACTIVE_LOW
+// will clear/set INTPOL and clear ODR accordingly.
+esp_err_t mcp23017_v2_set_int_polarity(mcp23017_v2_handle_t h, int dev_idx, mcp23017_int_polarity_t polarity);
+
+// Configure a port (mask) with combined settings: direction, pull-up, interrupt mode/polarity, and initial level for outputs.
+// If cfg->flags has MCP_CFG_BATCH_WRITE set, attempt a sequential read of registers 0x00..0x15, modify relevant bytes,
+// and write them back in a single sequential write. Falls back to individual register RMW calls
+esp_err_t mcp23017_v2_config_port(mcp23017_v2_handle_t dev, int addr, const mcp23017_pin_cfg_t *cfg);
+
+// ISR registration API (config-driven, DRY)
+typedef enum {
+    MCP_ISR_SERVICE_NO = 0,
+    MCP_ISR_SERVICE_YES = 1,
+} mcp_isr_service_t;
+
+typedef struct {
+    gpio_num_t int_gpio;          // MCU GPIO used for MCP INT
+    gpio_pull_mode_t pull_mode;   // esp-idf enum for pull configuration
+    gpio_int_type_t intr_type;    // esp-idf enum for interrupt type
+    mcp_isr_service_t install_isr_service; // whether to install gpio ISR service
+} mcp23017_isr_cfg_t;
+
+/**
+ * Register a worker task to be notified when the specified MCU GPIO IRQ fires.
+ * The ISR will call `vTaskNotifyGiveFromISR()` on the provided worker_task.
+ * Multiple workers may be registered for the same GPIO.
+ */
+esp_err_t mcp23017_isr_register(const mcp23017_isr_cfg_t *cfg, TaskHandle_t worker_task);
+
+/**
+ * Unregister a previously-registered worker for the given GPIO.
+ */
+esp_err_t mcp23017_isr_unregister(const mcp23017_isr_cfg_t *cfg, TaskHandle_t worker_task);
+
+/**
+ * Diagnostic: return number of ISR hits observed for the given MCU GPIO.
+ */
+uint32_t mcp23017_isr_get_hits(gpio_num_t int_gpio);
