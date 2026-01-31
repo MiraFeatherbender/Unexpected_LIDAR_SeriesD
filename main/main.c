@@ -45,15 +45,12 @@ void app_main(void)
     io_usb_msc_init();
     dispatcher_allocator_init();
     dispatcher_pool_init();
-#ifdef CONFIG_DISPATCHER_POOL_TEST
-    dispatcher_pool_test_init();
-#endif
     dispatcher_init();
-    io_MCP23017_start();
     io_log_init();
     io_gpio_init();
     io_ultrasonic_init();
     mod_line_sensor_window_init();
+    io_MCP23017_start();
     io_lidar_init();
     lidar_coordinator_init();
     io_wifi_ap_init();
