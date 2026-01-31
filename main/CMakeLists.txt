@@ -63,6 +63,7 @@ idf_component_register(
 
     INCLUDE_DIRS
         "."               # main/
+        "include"         # core includes
         "dispatcher"      # dispatcher*.h
         "plugins"         # io_*.h
         "plugins/rgb"     # rgb_anim*.h

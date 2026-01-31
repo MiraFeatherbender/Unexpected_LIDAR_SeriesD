@@ -60,6 +60,12 @@
  - `idf_component.yml` and `managed_components/`: external deps (cJSON, TinyUSB,
    led_strip, mdns).
 
+modules.def (dispatcher targets/sources)
+- File: `main/modules.def` lists modules via `X_MODULE(name)` macros (example: `X_MODULE(_RGB)`).
+- The `dispatcher.h` header includes `modules.def` to generate `TARGET_*` and `SOURCE_*` enums and name arrays — update `modules.def` when adding a new dispatcher target.
+- After editing `modules.def` rebuild the project so the generated enums line up with `dispatch_target_t`/`dispatch_source_t` used across modules.
+- Use the generated enums in code as `TARGET_RGB` / `SOURCE_RGB` and `dispatcher_fill_targets()` to build target arrays.
+
  Build / flash / monitor (quick)
  - Recommended target: `esp32s3`.
  - From repo root:
@@ -95,6 +101,29 @@
  dispatcher public API, or `main/CMakeLists.txt`) and I will expand those
  sections. Reply with feedback on any missing or confusing points.
 
+Component highlights — MCP23017
+- Location: `components/mcp23017/src/MCP23017.c` and `components/mcp23017/include/MCP23017.h`.
+- Auto-setup: `mcp23017_auto_setup(out_devices, apply_defaults, user_bus_cfg)`
+	- If `user_bus_cfg` provided the component creates the bus and sets `owns_bus`.
+	- Otherwise it auto-detects existing I2C master buses (I2C_NUM_0/1) and attaches devices at 0x20..0x27.
+- Register cache: mirrors registers 0x00..0x15 to reduce transactions; use
+	`mcp23017_sync_registers()` to refresh and `mcp23017_invalidate_register_cache()` to invalidate.
+- Batched writes: `MCP_CFG_BATCH_WRITE` causes the component to attempt a
+	sequential block write of 0x00..0x15 using the cache; on failure it falls
+	back to per-register read-modify-write operations.
+- Bus serialization: per-bus mutex registry (`bus_lock()`/`bus_unlock()`) serializes multi-register transactions across handles sharing the same bus.
+- ISR registry: `mcp23017_isr_register(cfg, worker_task)` notifies worker tasks via `vTaskNotifyGiveFromISR()`; supports up to 40 MCU GPIOs and 8 workers per GPIO.
+- Recommended usage: prefer the high-level helpers (`mcp23017_config_port`, `mcp23017_port_read/write`) for typical operations; use low-level `mcp23017_reg_read8`/`mcp23017_reg_write8` and `mcp23017_reg_read_block` when precise control is needed.
+
+Wifi submodule (quick)
+- Location: `main/plugins/wifi/` (`wifi_http_server.c`, `wifi_sse.c`, `io_wifi_ap.c`, `wifi_sse.h`, `wifi_http_server.h`).
+- Network modes: `io_wifi_ap` initializes Wi‑Fi, prefers STA (using `CONFIG_WIFI_STA_*`) and falls back to AP mode after retries; it starts mDNS and the HTTP server on success.
+- HTTP server: `wifi_http_server_start()` starts `esp_http_server` on port 80 (ctrl_port 32769), serves static files from `/data`, supports uploads via `/upload/*`, and registers REST endpoints via `rest_endpoints.def`.
+- REST -> dispatcher: handlers call `dispatch_from_rest()` which allocates a `pool_msg_t` (control pool), sets `msg->source = SOURCE_REST`, and broadcasts pointer messages to module pointer queues. JSON GET handlers use a `rest_json_request_t` with a semaphore to wait synchronously for a module to fill a JSON buffer.
+- SSE: `wifi_sse` implements server-sent events, registers an SSE endpoint and a `dispatcher_module_t` (`wifi_sse_mod`) to receive dispatcher messages and broadcast them to connected SSE clients. Targets map to event names (e.g., `console`, `line_sensor`).
+- Server considerations: `wifi_http_server` preallocates file and JSON buffers (uses SPIRAM when available), sets `max_uri_handlers` to accommodate routes + SSE, and registers SSE before the catch-all static handler to avoid masking routes.
+- Where to look: `main/plugins/wifi/wifi_http_server.c`, `main/plugins/wifi/wifi_sse.c`, `main/plugins/io_wifi_ap.c`.
+
 Dispatcher system (deep dive)
 - Purpose: central, lock-free-style routing for messages between plugins/modules.
 - Message models:
@@ -127,6 +156,18 @@ Dispatcher system (deep dive)
 	- Use `dispatcher_pool_alloc_blocking()` if you must wait for a buffer;
 		otherwise `try_alloc()` returns immediately on pool exhaustion.
 - Useful searches: `rg "dispatcher_pool_send_ptr|dispatcher_pool_msg_unref|dispatcher_register_ptr_queue|dispatcher_module_start"`.
+
+Dispatcher patterns (quick checklist)
+- ISR rules: keep ISRs minimal — either `vTaskNotifyGiveFromISR()` a worker or `xQueueSendFromISR()` into an ISR-safe queue. Do not allocate or block in ISR context.
+- Worker task: consume ISR queue or notification, allocate a `pool_msg_t` (try_alloc or alloc_blocking), fill `msg->source`, `msg->data`/`message_len` or `msg->context`, call `dispatcher_pool_send_ptr()` / `dispatcher_pool_send_ptr_params()` and `dispatcher_pool_msg_unref()` when done.
+- Pool choice: use `DISPATCHER_POOL_STREAMING` for high-rate telemetry (LIDAR, sensors) and `DISPATCHER_POOL_CONTROL` for REST/control flows.
+- Targets: call `dispatcher_fill_targets(targets)` then set `targets[0] = TARGET_*` (or add multiple targets) before sending.
+- Pointer queues: for modules that receive messages frequently or large payloads, register a pointer queue with `dispatcher_ptr_queue_create_register()` or `dispatcher_register_ptr_queue()` and consume `pool_msg_t *` directly from the queue.
+- Module template: use `dispatcher_module_t` + `dispatcher_module_start()` to create a standard pointer-task that unwraps `pool_msg_t` into `dispatcher_msg_t` and calls your `process_msg()`; `step_frame()` provides periodic work scheduling.
+- Refcounts: when sharing `pool_msg_t` across async consumers call `dispatcher_pool_msg_ref()` and always call `dispatcher_pool_msg_unref()` when finished; the pool logs double-unref for diagnostics.
+- Queue depth and timing: tasks log warnings when queue >75% full; choose `queue_len`, `stack_size`, and `task_prio` accordingly and prefer non-blocking allocations where appropriate.
+- TX flows: implement a pointer-queue consumer for transmit paths (example: LIDAR TX) — consumers read `pool_msg_t *`, use `dispatcher_pool_get_msg_const()` and `dispatcher_pool_msg_unref()` after transmit.
+- REST sync pattern: for JSON GETs use a `rest_json_request_t` with a semaphore — REST handler dispatches a pointer message with `context=rest_ctx` and waits on `rest_ctx.sem` for the module to fill the buffer and signal.
 
 
 
