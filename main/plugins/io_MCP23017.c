@@ -6,15 +6,15 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
-#include "MCP23017_v2.h"
+#include "MCP23017.h"
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
 
 static const char *TAG = "io_MCP23017";
 
 // Shared handle for the discovered MCP23017 so ISR worker can access it
-static mcp23017_v2_handle_t s_mcp_dev = NULL;
-static mcp23017_v2_bundle_t s_mcp_bundle = {0};
+static mcp23017_handle_t s_mcp_dev = NULL;
+static mcp23017_attached_devices_t s_mcp_devices = {0};
 
 // Select which MCU GPIO is used for the MCP23017 INT line.
 #define MCP_INT_GPIOA GPIO_NUM_1
@@ -37,11 +37,11 @@ static void mcp_gpio_isr_worker(void *arg)
 
         // Read INTF flags for both ports to determine which port(s) triggered
         uint8_t intf_a = 0, intf_b = 0;
-        esp_err_t rc = mcp23017_v2_reg_read8(s_mcp_dev, 0, MCP_REG_INTFA, &intf_a);
+        esp_err_t rc = mcp23017_reg_read8(s_mcp_dev, 0, MCP_REG_INTFA, &intf_a);
         if (rc != ESP_OK) {
             ESP_LOGW(TAG, "ISR worker: INTFA read failed (0x%X)", rc);
         }
-        rc = mcp23017_v2_reg_read8(s_mcp_dev, 0, MCP_REG_INTFB, &intf_b);
+        rc = mcp23017_reg_read8(s_mcp_dev, 0, MCP_REG_INTFB, &intf_b);
         if (rc != ESP_OK) {
             ESP_LOGW(TAG, "ISR worker: INTFB read failed (0x%X)", rc);
         }
@@ -49,15 +49,15 @@ static void mcp_gpio_isr_worker(void *arg)
         if (intf_a == 0 && intf_b == 0) {
             // No INTF flags set — read GPIOs for diagnostics (no logging)
             uint8_t gpio_a = 0, gpio_b = 0;
-            mcp23017_v2_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPA, &gpio_a);
-            mcp23017_v2_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPB, &gpio_b);
+            mcp23017_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPA, &gpio_a);
+            mcp23017_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPB, &gpio_b);
             (void)gpio_a; (void)gpio_b;
             continue;
         }
 
         if (intf_a) {
             uint8_t intcap_a = 0;
-            rc = mcp23017_v2_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPA, &intcap_a);
+            rc = mcp23017_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPA, &intcap_a);
             if (rc == ESP_OK) {
                 ESP_LOGI(TAG, "MCP23017 Port A INTF=0x%02X INTCAP=0x%02X", intf_a, intcap_a);
             } else {
@@ -67,7 +67,7 @@ static void mcp_gpio_isr_worker(void *arg)
 
         if (intf_b) {
             uint8_t intcap_b = 0;
-            rc = mcp23017_v2_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPB, &intcap_b);
+            rc = mcp23017_reg_read8(s_mcp_dev, 0, MCP_REG_INTCAPB, &intcap_b);
             if (rc == ESP_OK) {
                 ESP_LOGI(TAG, "MCP23017 Port B INTF=0x%02X INTCAP=0x%02X", intf_b, intcap_b);
             } else {
@@ -82,18 +82,18 @@ static void io_mcp23017_task(void *arg)
 {
     (void)arg;
 
-    // use v2 auto-setup to probe existing I2C bus and attach devices
-    // request that the v2 component apply datasheet defaults to discovered devices
+    // use auto-setup to probe existing I2C bus and attach devices
+    // request that the component apply datasheet defaults to discovered devices
     // allow retries and delay similar to previous behavior in this plugin
-    esp_err_t rc = mcp23017_v2_auto_setup(&s_mcp_bundle, true);
-    if (rc != ESP_OK || s_mcp_bundle.handle == NULL) {
-        ESP_LOGE(TAG, "Failed to auto-setup MCP23017 v2: 0x%X", rc);
+    esp_err_t rc = mcp23017_auto_setup(&s_mcp_devices, true, NULL);
+    if (rc != ESP_OK || s_mcp_devices.handle == NULL) {
+        ESP_LOGE(TAG, "Failed to auto-setup MCP23017: 0x%X", rc);
         vTaskDelete(NULL);
         return;
     }
-    s_mcp_dev = s_mcp_bundle.handle;
+    s_mcp_dev = s_mcp_devices.handle;
 
-    // The v2 auto_setup applied datasheet defaults; now configure Port B with a batched RMW
+    // The auto_setup applied datasheet defaults; now configure Port B with a batched RMW
     mcp23017_pin_cfg_t cfg = {
         .port = MCP_PORT_B,
         .mask = MCP_PORT_ALL,
@@ -104,9 +104,9 @@ static void io_mcp23017_task(void *arg)
         .initial_level = 0x00,
         .flags = MCP_CFG_BATCH_WRITE,
     };
-    (void)mcp23017_v2_config_port(s_mcp_dev, 0, &cfg);
+    (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
 
-    // The v2 auto_setup applied datasheet defaults; now configure Port A with a batched RMW
+    // The auto_setup applied datasheet defaults; now configure Port A with a batched RMW
     cfg.port = MCP_PORT_A;
     cfg.mask = 0xAA; // even pins interrupts only
     cfg.pin_mode = MCP_PIN_INPUT;
@@ -116,17 +116,17 @@ static void io_mcp23017_task(void *arg)
     cfg.initial_level = 0x00;
     cfg.flags = MCP_CFG_BATCH_WRITE;
 
-    (void)mcp23017_v2_config_port(s_mcp_dev, 0, &cfg);
+    (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
 
     cfg.port = MCP_PORT_A;
-    cfg.mask = 0b01010101; // odd pins interrupts off
+    cfg.mask = 0x55; // odd pins interrupts off
     cfg.pin_mode = MCP_PIN_INPUT;
     cfg.pullup = MCP_PULLUP_ENABLE;
     cfg.int_mode = MCP_INT_NONE;
     cfg.int_polarity = MCP_INT_OPENDRAIN;
     cfg.initial_level = 0x00;
     cfg.flags = MCP_CFG_BATCH_WRITE;
-    (void)mcp23017_v2_config_port(s_mcp_dev, 0, &cfg);
+    (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
     
     // MCP device initialized; ISR worker will report INTF/INTCAP when GPIO ISR fires.
     // Keep this task alive but idle as the ISR-driven worker now handles interrupt reporting.
@@ -139,7 +139,7 @@ void io_MCP23017_start(void)
 {
     ESP_LOGI(TAG, "io_MCP23017_start() called");
     
-    // Configure MCU INT GPIO and register our worker with the v2 ISR registry
+    // Configure MCU INT GPIO and register our worker with the ISR registry
     ESP_LOGI(TAG, "Using MCU INT GPIO %d", (int)MCP_INT_GPIOB);
 
     mcp23017_isr_cfg_t isr_cfg = {

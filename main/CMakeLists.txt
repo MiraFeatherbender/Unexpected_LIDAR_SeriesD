@@ -39,8 +39,7 @@ idf_component_register(
 
         # Library sources
         "src/UMSeriesD_idf.c"
-        "src/MCP23017.C"
-        "src/MCP23017_v2.c"
+
         
         # Modules
         "plugins/mod_line_sensor_window.c"
@@ -56,11 +55,11 @@ idf_component_register(
         esp_driver_i2c
         esp_adc
         led_strip
-        esp_driver_i2c
         fatfs
         wear_levelling
         esp_partition
         esp_timer
+        mcp23017
 
     INCLUDE_DIRS
         "."               # main/
