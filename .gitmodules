@@ -1,0 +1,4 @@
+[submodule "components/mcp23017"]
+	path = components/mcp23017
+	url = https://github.com/MiraFeatherbender/MCP23017.git
+	branch = main
