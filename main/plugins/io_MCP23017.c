@@ -72,7 +72,25 @@ static void mcp_gpio_isr_worker(void *arg)
         }
 
         if (intf_a) ESP_LOGI(TAG, "MCP23017 Port A INTF=0x%02X INTCAP=0x%02X", intf_a, intcap_a);
-        if (intf_b) ESP_LOGI(TAG, "MCP23017 Port B INTF=0x%02X INTCAP=0x%02X", intf_b, intcap_b);
+        if (intf_b) {
+            mcp23017_reverse8_inplace(&intcap_b);
+            // compose and send dispatcher message from INTCAP as SOURCE_LINE_SENSOR to TARGET_LINE_SENSOR_WINDOW
+            dispatch_target_t targets[TARGET_MAX];
+            dispatcher_fill_targets(targets);
+            targets[0] = TARGET_LINE_SENSOR_WINDOW;
+                dispatcher_pool_send_params_t params = {
+                    .type = DISPATCHER_POOL_STREAMING,
+                    .source = SOURCE_LINE_SENSOR,
+                    .targets = targets,
+                    .data = &intcap_b,
+                    .data_len = sizeof(intcap_b),
+                    .context = NULL
+                };
+                if (!dispatcher_pool_send_ptr_params(&params)) {
+                    ESP_LOGW(TAG, "Pool send failed; dropping window msg");
+                }
+            ESP_LOGI(TAG, "MCP23017 Port B INTF=0x%02X INTCAP=0x%02X", intf_b, intcap_b);
+        }
     }
 }
 
