@@ -43,8 +43,15 @@
 
  # Copilot Instructions — Unexpected_LIDAR_SeriesD (concise)
 
- Purpose: Give an AI coding agent the minimal, immediately actionable knowledge
- to be productive in this ESP-IDF LIDAR project.
+Purpose: Give an AI coding agent the minimal, immediately actionable knowledge
+to be productive in this ESP-IDF LIDAR project.
+
+Audience: This document is tuned primarily for AI coding agents — concise
+patterns, APIs, and file pointers rather than extended human onboarding.
+
+Component docs policy: Keep component-level instruction files (e.g., inside
+`components/<name>/.github/`) separate; the root doc highlights primary
+points and links to component docs as needed.
 
  Big picture
  - Modular ESP-IDF app for ESP32-S3. Core pattern: a central dispatcher and
@@ -56,6 +63,8 @@
  - `main/dispatcher.c`, `main/dispatcher.h`: message routing and task creation.
  - `main/main.c`, `main/modules.def`, `main/plugins/`: plugin load/registration.
  - `components/*/src/*.c` and `components/*/include/*.h`: driver APIs.
+ - `components/*/src/*.c` and `components/*/include/*.h`: driver APIs.
+ - `main/include/`: public headers for `main/plugins/` (plugin API headers moved here).
  - `Kconfig.projbuild` and `main/CMakeLists.txt`: feature flags and build entrypoints.
  - `idf_component.yml` and `managed_components/`: external deps (cJSON, TinyUSB,
    led_strip, mdns).

@@ -16,6 +16,7 @@
 #include "io_log.h"
 #include "io_wifi_ap.h"
 #include "mod_line_sensor_window.h"
+#include "mcp23017_test.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -50,11 +51,12 @@ void app_main(void)
     io_gpio_init();
     io_ultrasonic_init();
     mod_line_sensor_window_init();
-    io_MCP23017_start();
     io_lidar_init();
     lidar_coordinator_init();
     io_wifi_ap_init();
     io_battery_init();
+    io_MCP23017_init();
+    // mcp23017_test_start();
 
     rgb_anim_init_all();
     io_rgb_init();

@@ -23,6 +23,7 @@ idf_component_register(
         "plugins/io_log.c"
         "plugins/io_ultrasonic.c"
         "plugins/io_mcp23017.c"
+        "plugins/mcp23017_test.c"
         
         # Animation sources (auto-discovered)
         ${RGB_ANIMATION_SOURCES}

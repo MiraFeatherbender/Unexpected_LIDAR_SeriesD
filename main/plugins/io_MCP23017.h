@@ -5,7 +5,7 @@ extern "C" {
 #endif
 
 // Start the MCP23017 plugin task (non-blocking)
-void io_MCP23017_start(void);
+void io_MCP23017_init(void);
 
 #ifdef __cplusplus
 }
