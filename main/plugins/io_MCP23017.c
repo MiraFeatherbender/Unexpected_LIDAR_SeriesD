@@ -24,18 +24,18 @@ static mcp23017_attached_devices_t s_mcp_devices = {0};
 static TaskHandle_t s_mcp_gpio_worker_task = NULL;
 
 // Forward declarations
-static void io_mcp23017_process_msg(const dispatcher_msg_t *msg);
+static void io_motor_driver_process_msg(const dispatcher_msg_t *msg);
 static void mcp_gpio_isr_worker(void *arg);
 void io_MCP23017_init(void);
 
 // Dispatcher module instance: this module listens for TARGET_MOTOR_DRIVER messages
-static dispatcher_module_t io_mcp23017_mod = {
-    .name = "io_MCP23017",
+static dispatcher_module_t io_motor_driver_mod = {
+    .name = "io_motor_driver",
     .target = TARGET_MOTOR_DRIVER,
     .queue_len = 16,
     .stack_size = 4096,
     .task_prio = 5,
-    .process_msg = io_mcp23017_process_msg,
+    .process_msg = io_motor_driver_process_msg,
     .step_frame = NULL,
     .step_ms = 0,
     .queue = NULL,
@@ -89,7 +89,7 @@ static void mcp_gpio_isr_worker(void *arg)
                 if (!dispatcher_pool_send_ptr_params(&params)) {
                     ESP_LOGW(TAG, "Pool send failed; dropping window msg");
                 }
-            ESP_LOGI(TAG, "MCP23017 Port B INTF=0x%02X INTCAP=0x%02X", intf_b, intcap_b);
+            ESP_LOGD(TAG, "MCP23017 Port B INTF=0x%02X INTCAP=0x%02X", intf_b, intcap_b);
         }
     }
 }
@@ -146,7 +146,7 @@ static void io_mcp23017_task(void *arg)
 // Message format consumed by TARGET_MOTOR_DRIVER (pooled pointer messages):
 // data[0] = mask (bits to affect on the port)
 // data[1] = value (bits to set where mask==1)
-static void io_mcp23017_process_msg(const dispatcher_msg_t *msg)
+static void io_motor_driver_process_msg(const dispatcher_msg_t *msg)
 {
     if (!msg) return;
     if (!s_mcp_dev) {
@@ -225,8 +225,8 @@ void io_MCP23017_init(void)
     }
 
     // Start dispatcher module (creates pointer queue and processing task)
-    if (dispatcher_module_start(&io_mcp23017_mod) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to start dispatcher module for io_MCP23017");
+    if (dispatcher_module_start(&io_motor_driver_mod) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to start dispatcher module for io_motor_driver");
         return;
     }
 

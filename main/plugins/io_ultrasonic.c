@@ -26,7 +26,7 @@ static const char *TAG = "io_ultrasonic";
 
 /* Pin assignments */
 #define ULTRASONIC_TX_PIN (42)
-#define ULTRASONIC_RX_PIN (12)
+#define ULTRASONIC_RX_PIN (41)
 
 static esp_timer_handle_t tx_pulse_timer = NULL;
 
