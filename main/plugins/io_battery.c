@@ -13,7 +13,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#define BATTERY_CHECK_INTERVAL_MS 3000
+#define BATTERY_CHECK_INTERVAL_MS 500
 static const char *TAG = "io_battery";
 
 

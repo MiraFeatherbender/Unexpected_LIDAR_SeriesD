@@ -23,18 +23,10 @@
 #define STBI_ONLY_PNG
 
 // --- Configurable blur macros (change here, no rebuild required for small edits) ---
-#ifndef DYN_BLUR_SEPARABLE
 #define DYN_BLUR_SEPARABLE 1
-#endif
-
-#ifndef DYN_BLUR_KERNEL_SIZE
 // must be odd
 #define DYN_BLUR_KERNEL_SIZE 5
-#endif
-
-#ifndef DYN_BLUR_SIGMA
 #define DYN_BLUR_SIGMA 1.0f
-#endif
 
 static uint8_t *buffer = NULL; // 8KB buffer for JSON file
 static size_t buffer_len = 8192;
