@@ -34,6 +34,9 @@ __pycache__/
 .vscode/
 .devcontainer/
 .examples/
+notebooks/
+scripts/
+tools/
 
 # ESP-IDF Python environment (optional)
 .venv/
