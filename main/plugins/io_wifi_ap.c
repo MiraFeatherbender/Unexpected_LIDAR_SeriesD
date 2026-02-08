@@ -118,6 +118,14 @@ void io_wifi_ap_init(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+    // configure static IP for STA and AP interfaces if needed
+    esp_netif_ip_info_t ip_info;
+    ip_info.ip.addr = esp_ip4addr_aton("192.168.12.85");
+    ip_info.gw.addr = esp_ip4addr_aton("192.168.12.1");
+    ip_info.netmask.addr = esp_ip4addr_aton("255.255.255.0");
+
+    esp_netif_set_ip_info(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), &ip_info);
+
     s_retry_num = 0;
     s_sta_connected = false;
     start_sta_mode();

@@ -47,6 +47,14 @@ static dispatcher_module_t io_motor_driver_mod = {
 static void mcp_gpio_isr_worker(void *arg)
 {
     (void)arg;
+
+    uint8_t intcap_a_last = 0;
+    uint16_t encoder_pulse = 0xE0E0;
+    uint8_t gpio_a = 0;
+    TickType_t encoder_button_last_time = 0;
+    const TickType_t encoder_button_debounce_ticks = pdMS_TO_TICKS(15); // ms
+    uint16_t encoder_button_state = 0x8080; // low byte is current state of switch, high byte is previous state (initialized to released)
+
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
@@ -61,17 +69,68 @@ static void mcp_gpio_isr_worker(void *arg)
             ESP_LOGW(TAG, "ISR worker: block read INTFA..INTCAPB failed (0x%X)", rc);
             continue;
         }
-        uint8_t intf_a = buf[0];
+        uint8_t intf_a = buf[0] & 0xE0; // only upper 3 bits of Port A are used for line sensors and encoder inputs
         uint8_t intf_b = buf[1];
-        uint8_t intcap_a = buf[2];
+        uint8_t intcap_a = buf[2] & 0xE0; // only upper 3 bits of Port A are used for line sensors and encoder inputs
         uint8_t intcap_b = buf[3];
 
+
+
         if (intf_a == 0 && intf_b == 0) {
-            ESP_LOGW(TAG, "ISR worker: spurious INT - no INTF flags set");
+            ESP_LOGI(TAG, "ISR worker: spurious INT - no INTF flags set");
             continue;
         }
+        // Dedupe intcap_a
+        if (intcap_a == intcap_a_last) continue; // if intcap_a didn't change, skip processing to avoid duplicate logs and messages
+        
+        intcap_a_last = intcap_a;
+        encoder_pulse = (encoder_pulse << 8) | intcap_a; // shift in new pulse state for encoder inputs
+        
+        switch (intf_a){
+        case 0x20:{
+            switch (encoder_pulse) {
+            case 0x2040:
+                ESP_LOGI(TAG, "Encoder pulse clockwise detected");
+                ESP_LOGI(TAG, "Switch held low");
+                encoder_button_state = 0x0000;
+                break;
+            case 0xC0A0:
+                ESP_LOGI(TAG, "Encoder pulse clockwise detected");
+                ESP_LOGI(TAG, "Switch kept released");
+                encoder_button_state = 0x8080;
+                break;
+            case 0x0060:
+                ESP_LOGI(TAG, "Encoder pulse counterclockwise detected");
+                ESP_LOGI(TAG, "Switch held low");
+                encoder_button_state = 0x0000;
+                break;
+            case 0x80E0:
+                ESP_LOGI(TAG, "Encoder pulse counterclockwise detected");
+                ESP_LOGI(TAG, "Switch kept released");
+                encoder_button_state = 0x8080;
+                break;
+                }
+            break;
+            }
+        case 0x80:{
+            TickType_t now = xTaskGetTickCount();
+            if (now - encoder_button_last_time > encoder_button_debounce_ticks) {
 
-        if (intf_a) ESP_LOGI(TAG, "MCP23017 Port A INTF=0x%02X INTCAP=0x%02X", intf_a, intcap_a);
+                encoder_button_last_time = now;
+                encoder_button_state = (encoder_button_state << 8) | (intcap_a & 0x80); // shift in new state of switch (bit 7 of Port A)
+                // ESP_LOGI(TAG, "MCP23017 Port A INTF=0x%02X INTCAP=0x%02X ENCODER_PULSE=0x%04X", intf_a, intcap_a, encoder_pulse);     
+                switch(encoder_button_state) {
+                case 0x0080:
+                    ESP_LOGI(TAG, "Switch released");
+                    break;
+                case 0x8000:
+                    ESP_LOGI(TAG, "Switch pressed");
+                    break;
+                    }
+                break;
+                }
+            }
+        }
         if (intf_b) {
             mcp23017_reverse8_inplace(&intcap_b);
             // compose and send dispatcher message from INTCAP as SOURCE_LINE_SENSOR to TARGET_LINE_SENSOR_WINDOW
@@ -123,11 +182,33 @@ static void io_mcp23017_task(void *arg)
     };
     (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
 
-    // Configure Port A as outputs for motor control
+    // Configure Port A as outputs for motor control pins
     cfg.port = MCP_PORT_A;
-    cfg.mask = MCP_PORT_ALL;
+    cfg.mask = 0X1F; // only use lower 5 bits for motors
     cfg.pin_mode = MCP_PIN_OUTPUT;
     cfg.pullup = MCP_PULLUP_DISABLE;
+    cfg.int_mode = MCP_INT_NONE;
+    cfg.int_polarity = MCP_INT_OPENDRAIN;
+    cfg.initial_level = 0x00;
+    cfg.flags = MCP_CFG_BATCH_WRITE;
+    (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
+
+    // Configure Port A bits 5 and 7 as inputs for rotary encoder with pullups, with interrupts on falling edge
+    cfg.port = MCP_PORT_A;
+    cfg.mask = 0xA0; // bits 5 and 7
+    cfg.pin_mode = MCP_PIN_INPUT;
+    cfg.pullup = MCP_PULLUP_ENABLE;
+    cfg.int_mode = MCP_INT_ANYEDGE; 
+    cfg.int_polarity = MCP_INT_OPENDRAIN;
+    cfg.initial_level = 0x00;
+    cfg.flags = MCP_CFG_BATCH_WRITE;
+    (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
+
+    // COnfigure Port A pin 6 as input for encoder direction with pullup without interrupts
+    cfg.port = MCP_PORT_A;
+    cfg.mask = 0x40; // bit 6
+    cfg.pin_mode = MCP_PIN_INPUT;
+    cfg.pullup = MCP_PULLUP_ENABLE;
     cfg.int_mode = MCP_INT_NONE;
     cfg.int_polarity = MCP_INT_OPENDRAIN;
     cfg.initial_level = 0x00;
@@ -182,33 +263,6 @@ void io_MCP23017_init(void)
         return;
     }
     s_mcp_dev = s_mcp_devices.handle;
-
-    // Configure Port B as inputs with pullups and interrupt on any edge
-    mcp23017_pin_cfg_t cfg = {
-        .port = MCP_PORT_B,
-        .mask = MCP_PORT_ALL,
-        .pin_mode = MCP_PIN_INPUT,
-        .pullup = MCP_PULLUP_ENABLE,
-        .int_mode = MCP_INT_ANYEDGE,
-        .int_polarity = MCP_INT_OPENDRAIN,
-        .initial_level = 0x00,
-        .flags = MCP_CFG_BATCH_WRITE,
-    };
-    (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
-
-    // Configure Port A as outputs for motor control
-    cfg.port = MCP_PORT_A;
-    cfg.mask = MCP_PORT_ALL;
-    cfg.pin_mode = MCP_PIN_OUTPUT;
-    cfg.pullup = MCP_PULLUP_DISABLE;
-    cfg.int_mode = MCP_INT_NONE;
-    cfg.int_polarity = MCP_INT_OPENDRAIN;
-    cfg.initial_level = 0x00;
-    cfg.flags = MCP_CFG_BATCH_WRITE;
-    (void)mcp23017_config_port(s_mcp_dev, 0, &cfg);
-
-    // Enable mirrored INT output
-    (void)mcp23017_set_int_mirror(s_mcp_dev, 0, true);
 
     // Create ISR worker task and register with MCP ISR helper (worker may run before device attached)
     BaseType_t created = xTaskCreate(mcp_gpio_isr_worker, "mcp_gpio_worker", 4096, NULL, 6, &s_mcp_gpio_worker_task);

@@ -151,7 +151,8 @@ void ums3_set_pixel_color(uint8_t r, uint8_t g, uint8_t b) {
         r = (r * s_pixel_brightness) / 255;
         g = (g * s_pixel_brightness) / 255;
         b = (b * s_pixel_brightness) / 255;
-        led_strip_set_pixel(s_led_strip, 0, r, g, b);
+        for(int i = 0; i < 1; ++i)
+        led_strip_set_pixel(s_led_strip, i, r, g, b);
         led_strip_refresh(s_led_strip);
     } else {
         ESP_LOGE("UMSeriesD", "setPixelColor: led_strip not initialized");

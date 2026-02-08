@@ -1,6 +1,6 @@
 /* Auto-generated torus point LUT
    Count: 5952
-   Slices (n_steps): 64
+   Slices: 64
    Points per slice: 93
    Scale applied: 1.0
    Stored as: <class 'numpy.int16'>
@@ -11,11 +11,8 @@
 
 #include <stdint.h>
 
-#define TORUS_POINTS_COUNT 5952
-#define TORUS_POINTS_SLICES 64
-#define TORUS_POINTS_PER_SLICE 93
-
-static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
+static const int16_t TORUS_POINTS[64][93][3] = {
+  {
     { 64, 31, 0 },
     { 70, 30, 0 },
     { 76, 29, 0 },
@@ -109,6 +106,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 58, 0, 0 },
     { 60, 4, 0 },
     { 64, 0, 0 },
+  },
+  {
     { 64, 31, 6 },
     { 70, 30, 7 },
     { 76, 29, 7 },
@@ -202,6 +201,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 58, 0, 6 },
     { 60, 4, 6 },
     { 64, 0, 6 },
+  },
+  {
     { 63, 31, 12 },
     { 69, 30, 14 },
     { 75, 29, 15 },
@@ -295,6 +296,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 57, 0, 11 },
     { 59, 4, 12 },
     { 63, 0, 12 },
+  },
+  {
     { 61, 31, 19 },
     { 67, 30, 20 },
     { 73, 29, 22 },
@@ -388,6 +391,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 56, 0, 17 },
     { 57, 4, 17 },
     { 61, 0, 19 },
+  },
+  {
     { 59, 31, 24 },
     { 65, 30, 27 },
     { 70, 29, 29 },
@@ -481,6 +486,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 54, 0, 22 },
     { 55, 4, 23 },
     { 59, 0, 24 },
+  },
+  {
     { 56, 31, 30 },
     { 62, 30, 33 },
     { 67, 29, 36 },
@@ -574,6 +581,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 51, 0, 27 },
     { 53, 4, 28 },
     { 56, 0, 30 },
+  },
+  {
     { 53, 31, 36 },
     { 58, 30, 39 },
     { 63, 29, 42 },
@@ -667,6 +676,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 48, 0, 32 },
     { 50, 4, 33 },
     { 53, 0, 36 },
+  },
+  {
     { 49, 31, 41 },
     { 54, 30, 44 },
     { 59, 29, 48 },
@@ -760,6 +771,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 45, 0, 37 },
     { 46, 4, 38 },
     { 49, 0, 41 },
+  },
+  {
     { 45, 31, 45 },
     { 49, 30, 49 },
     { 54, 29, 54 },
@@ -853,6 +866,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 41, 0, 41 },
     { 42, 4, 42 },
     { 45, 0, 45 },
+  },
+  {
     { 41, 31, 49 },
     { 44, 30, 54 },
     { 48, 29, 59 },
@@ -946,6 +961,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 37, 0, 45 },
     { 38, 4, 46 },
     { 41, 0, 49 },
+  },
+  {
     { 36, 31, 53 },
     { 39, 30, 58 },
     { 42, 29, 63 },
@@ -1039,6 +1056,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 32, 0, 48 },
     { 33, 4, 50 },
     { 36, 0, 53 },
+  },
+  {
     { 30, 31, 56 },
     { 33, 30, 62 },
     { 36, 29, 67 },
@@ -1132,6 +1151,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 27, 0, 51 },
     { 28, 4, 53 },
     { 30, 0, 56 },
+  },
+  {
     { 24, 31, 59 },
     { 27, 30, 65 },
     { 29, 29, 70 },
@@ -1225,6 +1246,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 22, 0, 54 },
     { 23, 4, 55 },
     { 24, 0, 59 },
+  },
+  {
     { 19, 31, 61 },
     { 20, 30, 67 },
     { 22, 29, 73 },
@@ -1318,6 +1341,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 17, 0, 56 },
     { 17, 4, 57 },
     { 19, 0, 61 },
+  },
+  {
     { 12, 31, 63 },
     { 14, 30, 69 },
     { 15, 29, 75 },
@@ -1411,6 +1436,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 11, 0, 57 },
     { 12, 4, 59 },
     { 12, 0, 63 },
+  },
+  {
     { 6, 31, 64 },
     { 7, 30, 70 },
     { 7, 29, 76 },
@@ -1504,6 +1531,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 6, 0, 58 },
     { 6, 4, 60 },
     { 6, 0, 64 },
+  },
+  {
     { 0, 31, 64 },
     { 0, 30, 70 },
     { 0, 29, 76 },
@@ -1597,6 +1626,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 0, 0, 58 },
     { 0, 4, 60 },
     { 0, 0, 64 },
+  },
+  {
     { -6, 31, 64 },
     { -7, 30, 70 },
     { -7, 29, 76 },
@@ -1690,6 +1721,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -6, 0, 58 },
     { -6, 4, 60 },
     { -6, 0, 64 },
+  },
+  {
     { -12, 31, 63 },
     { -14, 30, 69 },
     { -15, 29, 75 },
@@ -1783,6 +1816,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -11, 0, 57 },
     { -12, 4, 59 },
     { -12, 0, 63 },
+  },
+  {
     { -19, 31, 61 },
     { -20, 30, 67 },
     { -22, 29, 73 },
@@ -1876,6 +1911,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -17, 0, 56 },
     { -17, 4, 57 },
     { -19, 0, 61 },
+  },
+  {
     { -24, 31, 59 },
     { -27, 30, 65 },
     { -29, 29, 70 },
@@ -1969,6 +2006,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -22, 0, 54 },
     { -23, 4, 55 },
     { -24, 0, 59 },
+  },
+  {
     { -30, 31, 56 },
     { -33, 30, 62 },
     { -36, 29, 67 },
@@ -2062,6 +2101,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -27, 0, 51 },
     { -28, 4, 53 },
     { -30, 0, 56 },
+  },
+  {
     { -36, 31, 53 },
     { -39, 30, 58 },
     { -42, 29, 63 },
@@ -2155,6 +2196,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -32, 0, 48 },
     { -33, 4, 50 },
     { -36, 0, 53 },
+  },
+  {
     { -41, 31, 49 },
     { -44, 30, 54 },
     { -48, 29, 59 },
@@ -2248,6 +2291,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -37, 0, 45 },
     { -38, 4, 46 },
     { -41, 0, 49 },
+  },
+  {
     { -45, 31, 45 },
     { -49, 30, 49 },
     { -54, 29, 54 },
@@ -2341,6 +2386,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -41, 0, 41 },
     { -42, 4, 42 },
     { -45, 0, 45 },
+  },
+  {
     { -49, 31, 41 },
     { -54, 30, 44 },
     { -59, 29, 48 },
@@ -2434,6 +2481,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -45, 0, 37 },
     { -46, 4, 38 },
     { -49, 0, 41 },
+  },
+  {
     { -53, 31, 36 },
     { -58, 30, 39 },
     { -63, 29, 42 },
@@ -2527,6 +2576,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -48, 0, 32 },
     { -50, 4, 33 },
     { -53, 0, 36 },
+  },
+  {
     { -56, 31, 30 },
     { -62, 30, 33 },
     { -67, 29, 36 },
@@ -2620,6 +2671,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -51, 0, 27 },
     { -53, 4, 28 },
     { -56, 0, 30 },
+  },
+  {
     { -59, 31, 24 },
     { -65, 30, 27 },
     { -70, 29, 29 },
@@ -2713,6 +2766,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -54, 0, 22 },
     { -55, 4, 23 },
     { -59, 0, 24 },
+  },
+  {
     { -61, 31, 19 },
     { -67, 30, 20 },
     { -73, 29, 22 },
@@ -2806,6 +2861,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -56, 0, 17 },
     { -57, 4, 17 },
     { -61, 0, 19 },
+  },
+  {
     { -63, 31, 12 },
     { -69, 30, 14 },
     { -75, 29, 15 },
@@ -2899,6 +2956,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -57, 0, 11 },
     { -59, 4, 12 },
     { -63, 0, 12 },
+  },
+  {
     { -64, 31, 6 },
     { -70, 30, 7 },
     { -76, 29, 7 },
@@ -2992,6 +3051,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -58, 0, 6 },
     { -60, 4, 6 },
     { -64, 0, 6 },
+  },
+  {
     { -64, 31, 0 },
     { -70, 30, 0 },
     { -76, 29, 0 },
@@ -3085,6 +3146,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -58, 0, 0 },
     { -60, 4, 0 },
     { -64, 0, 0 },
+  },
+  {
     { -64, 31, -6 },
     { -70, 30, -7 },
     { -76, 29, -7 },
@@ -3178,6 +3241,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -58, 0, -6 },
     { -60, 4, -6 },
     { -64, 0, -6 },
+  },
+  {
     { -63, 31, -12 },
     { -69, 30, -14 },
     { -75, 29, -15 },
@@ -3271,6 +3336,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -57, 0, -11 },
     { -59, 4, -12 },
     { -63, 0, -12 },
+  },
+  {
     { -61, 31, -19 },
     { -67, 30, -20 },
     { -73, 29, -22 },
@@ -3364,6 +3431,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -56, 0, -17 },
     { -57, 4, -17 },
     { -61, 0, -19 },
+  },
+  {
     { -59, 31, -24 },
     { -65, 30, -27 },
     { -70, 29, -29 },
@@ -3457,6 +3526,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -54, 0, -22 },
     { -55, 4, -23 },
     { -59, 0, -24 },
+  },
+  {
     { -56, 31, -30 },
     { -62, 30, -33 },
     { -67, 29, -36 },
@@ -3550,6 +3621,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -51, 0, -27 },
     { -53, 4, -28 },
     { -56, 0, -30 },
+  },
+  {
     { -53, 31, -36 },
     { -58, 30, -39 },
     { -63, 29, -42 },
@@ -3643,6 +3716,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -48, 0, -32 },
     { -50, 4, -33 },
     { -53, 0, -36 },
+  },
+  {
     { -49, 31, -41 },
     { -54, 30, -44 },
     { -59, 29, -48 },
@@ -3736,6 +3811,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -45, 0, -37 },
     { -46, 4, -38 },
     { -49, 0, -41 },
+  },
+  {
     { -45, 31, -45 },
     { -49, 30, -49 },
     { -54, 29, -54 },
@@ -3829,6 +3906,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -41, 0, -41 },
     { -42, 4, -42 },
     { -45, 0, -45 },
+  },
+  {
     { -41, 31, -49 },
     { -44, 30, -54 },
     { -48, 29, -59 },
@@ -3922,6 +4001,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -37, 0, -45 },
     { -38, 4, -46 },
     { -41, 0, -49 },
+  },
+  {
     { -36, 31, -53 },
     { -39, 30, -58 },
     { -42, 29, -63 },
@@ -4015,6 +4096,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -32, 0, -48 },
     { -33, 4, -50 },
     { -36, 0, -53 },
+  },
+  {
     { -30, 31, -56 },
     { -33, 30, -62 },
     { -36, 29, -67 },
@@ -4108,6 +4191,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -27, 0, -51 },
     { -28, 4, -53 },
     { -30, 0, -56 },
+  },
+  {
     { -24, 31, -59 },
     { -27, 30, -65 },
     { -29, 29, -70 },
@@ -4201,6 +4286,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -22, 0, -54 },
     { -23, 4, -55 },
     { -24, 0, -59 },
+  },
+  {
     { -19, 31, -61 },
     { -20, 30, -67 },
     { -22, 29, -73 },
@@ -4294,6 +4381,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -17, 0, -56 },
     { -17, 4, -57 },
     { -19, 0, -61 },
+  },
+  {
     { -12, 31, -63 },
     { -14, 30, -69 },
     { -15, 29, -75 },
@@ -4387,6 +4476,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -11, 0, -57 },
     { -12, 4, -59 },
     { -12, 0, -63 },
+  },
+  {
     { -6, 31, -64 },
     { -7, 30, -70 },
     { -7, 29, -76 },
@@ -4480,6 +4571,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { -6, 0, -58 },
     { -6, 4, -60 },
     { -6, 0, -64 },
+  },
+  {
     { 0, 31, -64 },
     { 0, 30, -70 },
     { 0, 29, -76 },
@@ -4573,6 +4666,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 0, 0, -58 },
     { 0, 4, -60 },
     { 0, 0, -64 },
+  },
+  {
     { 6, 31, -64 },
     { 7, 30, -70 },
     { 7, 29, -76 },
@@ -4666,6 +4761,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 6, 0, -58 },
     { 6, 4, -60 },
     { 6, 0, -64 },
+  },
+  {
     { 12, 31, -63 },
     { 14, 30, -69 },
     { 15, 29, -75 },
@@ -4759,6 +4856,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 11, 0, -57 },
     { 12, 4, -59 },
     { 12, 0, -63 },
+  },
+  {
     { 19, 31, -61 },
     { 20, 30, -67 },
     { 22, 29, -73 },
@@ -4852,6 +4951,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 17, 0, -56 },
     { 17, 4, -57 },
     { 19, 0, -61 },
+  },
+  {
     { 24, 31, -59 },
     { 27, 30, -65 },
     { 29, 29, -70 },
@@ -4945,6 +5046,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 22, 0, -54 },
     { 23, 4, -55 },
     { 24, 0, -59 },
+  },
+  {
     { 30, 31, -56 },
     { 33, 30, -62 },
     { 36, 29, -67 },
@@ -5038,6 +5141,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 27, 0, -51 },
     { 28, 4, -53 },
     { 30, 0, -56 },
+  },
+  {
     { 36, 31, -53 },
     { 39, 30, -58 },
     { 42, 29, -63 },
@@ -5131,6 +5236,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 32, 0, -48 },
     { 33, 4, -50 },
     { 36, 0, -53 },
+  },
+  {
     { 41, 31, -49 },
     { 44, 30, -54 },
     { 48, 29, -59 },
@@ -5224,6 +5331,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 37, 0, -45 },
     { 38, 4, -46 },
     { 41, 0, -49 },
+  },
+  {
     { 45, 31, -45 },
     { 49, 30, -49 },
     { 54, 29, -54 },
@@ -5317,6 +5426,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 41, 0, -41 },
     { 42, 4, -42 },
     { 45, 0, -45 },
+  },
+  {
     { 49, 31, -41 },
     { 54, 30, -44 },
     { 59, 29, -48 },
@@ -5410,6 +5521,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 45, 0, -37 },
     { 46, 4, -38 },
     { 49, 0, -41 },
+  },
+  {
     { 53, 31, -36 },
     { 58, 30, -39 },
     { 63, 29, -42 },
@@ -5503,6 +5616,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 48, 0, -32 },
     { 50, 4, -33 },
     { 53, 0, -36 },
+  },
+  {
     { 56, 31, -30 },
     { 62, 30, -33 },
     { 67, 29, -36 },
@@ -5596,6 +5711,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 51, 0, -27 },
     { 53, 4, -28 },
     { 56, 0, -30 },
+  },
+  {
     { 59, 31, -24 },
     { 65, 30, -27 },
     { 70, 29, -29 },
@@ -5689,6 +5806,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 54, 0, -22 },
     { 55, 4, -23 },
     { 59, 0, -24 },
+  },
+  {
     { 61, 31, -19 },
     { 67, 30, -20 },
     { 73, 29, -22 },
@@ -5782,6 +5901,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 56, 0, -17 },
     { 57, 4, -17 },
     { 61, 0, -19 },
+  },
+  {
     { 63, 31, -12 },
     { 69, 30, -14 },
     { 75, 29, -15 },
@@ -5875,6 +5996,8 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 57, 0, -11 },
     { 59, 4, -12 },
     { 63, 0, -12 },
+  },
+  {
     { 64, 31, -6 },
     { 70, 30, -7 },
     { 76, 29, -7 },
@@ -5968,6 +6091,7 @@ static const int16_t TORUS_POINTS[TORUS_POINTS_COUNT][3] = {
     { 58, 0, -6 },
     { 60, 4, -6 },
     { 64, 0, -6 },
+  },
 };
 
 #endif // TORUS_POINTS_H
