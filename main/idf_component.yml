@@ -1,13 +1,13 @@
-
 ## IDF Component Manager Manifest File
 dependencies:
   espressif/esp-dsp:
-    version: "*"
-  espressif/led_strip: 
-    version: "^3.0.0"
+    version: '*'
+  espressif/led_strip:
+    version: ^3.0.0
   espressif/esp_tinyusb:
-    version: "^2.0.0"
+    version: ^2.0.0
   espressif/mdns:
-    version: "*"
-  idf: "^5.0"
-  cjson: "^1.0.0"
+    version: '*'
+  idf: ^5.0
+  cjson: ^1.0.0
+  espressif/esp_lvgl_port: ^2.7.0

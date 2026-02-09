@@ -56,6 +56,7 @@ idf_component_register(
         esp_driver_i2c
         esp_adc
         led_strip
+        esp_lcd
         fatfs
         wear_levelling
         esp_partition
