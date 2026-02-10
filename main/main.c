@@ -17,6 +17,7 @@
 #include "io_wifi_ap.h"
 #include "mod_line_sensor_window.h"
 #include "mcp23017_test.h"
+#include "io_i2c_oled.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -54,6 +55,9 @@ void app_main(void)
     io_battery_init();
     io_MCP23017_init();
     mcp23017_test_start();
+
+    /* Initialize I2C OLED example (reuses existing I2C bus if present) */
+    io_i2c_oled_init(NULL);
 
     rgb_anim_init_all();
     io_rgb_init();

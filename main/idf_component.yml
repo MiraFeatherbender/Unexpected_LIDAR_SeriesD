@@ -1,5 +1,9 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  esp_lcd_sh1107: ^1
+  esp_lvgl_port:
+    version: '*'
+  lvgl/lvgl: ^8
   espressif/esp-dsp:
     version: '*'
   espressif/led_strip:

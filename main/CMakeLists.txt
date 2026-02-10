@@ -24,6 +24,7 @@ idf_component_register(
         "plugins/io_ultrasonic.c"
         "plugins/io_mcp23017.c"
         "plugins/mcp23017_test.c"
+        "plugins/io_i2c_oled.c"
         
         # Animation sources (auto-discovered)
         ${RGB_ANIMATION_SOURCES}
@@ -57,11 +58,14 @@ idf_component_register(
         esp_adc
         led_strip
         esp_lcd
+        esp_lvgl_port
         fatfs
         wear_levelling
         esp_partition
         esp_timer
         mcp23017
+        driver
+        
 
     INCLUDE_DIRS
         "."               # main/

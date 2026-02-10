@@ -1,0 +1,19 @@
+{
+  "files": [
+    "main/dispatcher.c",
+    "main/dispatcher.h",
+    "main/modules.def",
+    "main/dispatcher/dispatcher_pool.h",
+    "main/dispatcher/dispatcher_pool.c",
+    "main/dispatcher/dispatcher_allocator.c",
+    "main/dispatcher/dispatcher_module.h",
+    "main/dispatcher/dispatcher_module.c",
+    "main/plugins/io_i2c_oled.c",
+    "main/plugins/io_i2c_oled.h",
+    "managed_components/espressif__esp_lvgl_port/include/esp_lvgl_port.h",
+    "managed_components/espressif__esp_lvgl_port/src/lvgl9/esp_lvgl_port_disp.c",
+    "managed_components/espressif__esp_lvgl_port/src/lvgl9/esp_lvgl_port.c",
+    "managed_components/espressif__esp_lcd_sh1107/include/esp_lcd_sh1107.h",
+    "managed_components/espressif__esp_lcd_sh1107/esp_lcd_sh1107.c"
+  ]
+}
