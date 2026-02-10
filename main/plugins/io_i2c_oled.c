@@ -133,14 +133,8 @@ esp_err_t io_i2c_oled_init(const i2c_master_bus_config_t *user_bus_cfg)
         return ESP_ERR_NO_MEM;
     }
 
-    ESP_LOGI(TAG, "Display LVGL Hello World");
-    if (lvgl_port_lock(0)) {
-        lv_disp_set_rotation(disp, LV_DISPLAY_ROTATION_0);
-        lv_obj_t *label = lv_label_create(lv_scr_act());
-        lv_label_set_text(label, "Hello World");
-        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
-        lvgl_port_unlock();
-    }
+    ESP_LOGI(TAG, "Display initialized for LVGL use (UI creation deferred)");
+    /* UI elements are created separately (e.g. main/ui/ui_hello.c). */
 
     ESP_LOGI(TAG, "io_i2c_oled: init complete");
     return ESP_OK;

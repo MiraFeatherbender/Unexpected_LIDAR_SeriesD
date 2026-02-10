@@ -42,9 +42,12 @@ idf_component_register(
         # Library sources
         "src/UMSeriesD_idf.c"
 
-        
+        # UI elements
+        "ui/ui_hello.c"
+
         # Modules
         "plugins/mod_line_sensor_window.c"
+        
 
     REQUIRES
         esp_wifi
@@ -77,6 +80,7 @@ idf_component_register(
         "plugins/wifi"    # wifi_*.h
         "plugins/battery" # battery_json.h
         "src"             # UMSeriesD_idf.h
+        "ui"              # ui modules
 )
 
 # Enable floating point support in printf/scanf

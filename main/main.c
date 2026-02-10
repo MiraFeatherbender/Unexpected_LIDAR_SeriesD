@@ -18,6 +18,7 @@
 #include "mod_line_sensor_window.h"
 #include "mcp23017_test.h"
 #include "io_i2c_oled.h"
+#include "ui_hello.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -58,6 +59,11 @@ void app_main(void)
 
     /* Initialize I2C OLED example (reuses existing I2C bus if present) */
     io_i2c_oled_init(NULL);
+
+    /* Show Hello UI (separate module) */
+    if (ui_hello_show() != ESP_OK) {
+        ESP_LOGW("ui_hello", "ui_hello_show failed");
+    }
 
     rgb_anim_init_all();
     io_rgb_init();
