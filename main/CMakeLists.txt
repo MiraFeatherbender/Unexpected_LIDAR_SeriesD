@@ -44,6 +44,7 @@ idf_component_register(
 
         # UI elements
         "ui/ui_hello.c"
+        "ui/ui_input_adapter.c"
 
         # Modules
         "plugins/mod_line_sensor_window.c"
@@ -62,6 +63,7 @@ idf_component_register(
         led_strip
         esp_lcd
         esp_lvgl_port
+        lvgl__lvgl
         fatfs
         wear_levelling
         esp_partition

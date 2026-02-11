@@ -18,4 +18,3 @@ int rgb_anim_dynamic_count(void);
 // For test/debug: get animation name by index
 const char *rgb_anim_dynamic_name(int idx);
 
-// ...add more API as needed for advanced control...

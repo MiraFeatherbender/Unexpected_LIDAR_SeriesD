@@ -86,51 +86,86 @@ static void mcp_gpio_isr_worker(void *arg)
         intcap_a_last = intcap_a;
         encoder_pulse = (encoder_pulse << 8) | intcap_a; // shift in new pulse state for encoder inputs
         
-        switch (intf_a){
-        case 0x20:{
-            switch (encoder_pulse) {
-            case 0x2040:
-                ESP_LOGI(TAG, "Encoder pulse clockwise detected");
-                ESP_LOGI(TAG, "Switch held low");
-                encoder_button_state = 0x0000;
-                break;
-            case 0xC0A0:
-                ESP_LOGI(TAG, "Encoder pulse clockwise detected");
-                ESP_LOGI(TAG, "Switch kept released");
-                encoder_button_state = 0x8080;
-                break;
-            case 0x0060:
-                ESP_LOGI(TAG, "Encoder pulse counterclockwise detected");
-                ESP_LOGI(TAG, "Switch held low");
-                encoder_button_state = 0x0000;
-                break;
-            case 0x80E0:
-                ESP_LOGI(TAG, "Encoder pulse counterclockwise detected");
-                ESP_LOGI(TAG, "Switch kept released");
-                encoder_button_state = 0x8080;
-                break;
-                }
-            break;
-            }
-        case 0x80:{
-            TickType_t now = xTaskGetTickCount();
-            if (now - encoder_button_last_time > encoder_button_debounce_ticks) {
+        /* prepare a single outgoing encoded byte per ISR event; set enc_len>0 in cases */
+        uint8_t enc = 0x00;
+        size_t enc_len = 0;
 
-                encoder_button_last_time = now;
-                encoder_button_state = (encoder_button_state << 8) | (intcap_a & 0x80); // shift in new state of switch (bit 7 of Port A)
-                // ESP_LOGI(TAG, "MCP23017 Port A INTF=0x%02X INTCAP=0x%02X ENCODER_PULSE=0x%04X", intf_a, intcap_a, encoder_pulse);     
-                switch(encoder_button_state) {
-                case 0x0080:
-                    ESP_LOGI(TAG, "Switch released");
+        switch (intf_a) {
+            case 0x20: {
+                switch (encoder_pulse) {
+                case 0x2040:
+                    // ESP_LOGI(TAG, "Encoder pulse clockwise detected");
+                    // ESP_LOGI(TAG, "Switch held low");
+                    encoder_button_state = 0x0000;
+                    enc = 0x10 | 0x00; /* dir=+1, held pressed */
+                    enc_len = 1;
                     break;
-                case 0x8000:
-                    ESP_LOGI(TAG, "Switch pressed");
+                case 0xC0A0:
+                    // ESP_LOGI(TAG, "Encoder pulse clockwise detected");
+                    // ESP_LOGI(TAG, "Switch kept released");
+                    encoder_button_state = 0x8080;
+                    enc = 0x10 | 0x03; /* dir=+1, kept released */
+                    enc_len = 1;
                     break;
-                    }
-                break;
+                case 0x0060:
+                    // ESP_LOGI(TAG, "Encoder pulse counterclockwise detected");
+                    // ESP_LOGI(TAG, "Switch held low");
+                    encoder_button_state = 0x0000;
+                    enc = 0x30 | 0x00; /* dir=-1, held pressed */
+                    enc_len = 1;
+                    break;
+                case 0x80E0:
+                    // ESP_LOGI(TAG, "Encoder pulse counterclockwise detected");
+                    // ESP_LOGI(TAG, "Switch kept released");
+                    encoder_button_state = 0x8080;
+                    enc = 0x30 | 0x03; /* dir=-1, kept released */
+                    enc_len = 1;
+                    break;
                 }
+                break;
+            }
+            case 0x80: {
+                TickType_t now = xTaskGetTickCount();
+                if (now - encoder_button_last_time > encoder_button_debounce_ticks) {
+
+                    encoder_button_last_time = now;
+                    encoder_button_state = (encoder_button_state << 8) | (intcap_a & 0x80); // shift in new state of switch (bit 7 of Port A)
+                    // ESP_LOGI(TAG, "MCP23017 Port A INTF=0x%02X INTCAP=0x%02X ENCODER_PULSE=0x%04X", intf_a, intcap_a, encoder_pulse);     
+                    switch (encoder_button_state) {
+                    case 0x0080:
+                        // ESP_LOGI(TAG, "Switch released");
+                        enc = 0x00 | 0x01; /* dir=0, press->release */
+                        enc_len = 1;
+                        break;
+                    case 0x8000:
+                        // ESP_LOGI(TAG, "Switch pressed");
+                        enc = 0x00 | 0x02; /* dir=0, release->press */
+                        enc_len = 1;
+                        break;
+                    }
+                }
+                break;
             }
         }
+
+        /* Send encoded message if set */
+        if (enc_len > 0) {
+            dispatch_target_t targets[TARGET_MAX];
+            dispatcher_fill_targets(targets);
+            targets[0] = TARGET_OLED_INDEV;
+            dispatcher_pool_send_params_t params = {
+                .type = DISPATCHER_POOL_STREAMING,
+                .source = SOURCE_ROTARY_ENCODER,
+                .targets = targets,
+                .data = &enc,
+                .data_len = enc_len,
+                .context = NULL
+            };
+            if (!dispatcher_pool_send_ptr_params(&params)) {
+                ESP_LOGW(TAG, "Pool send failed; dropping encoder msg");
+            }
+        }
+        
         if (intf_b) {
             mcp23017_reverse8_inplace(&intcap_b);
             // compose and send dispatcher message from INTCAP as SOURCE_LINE_SENSOR to TARGET_LINE_SENSOR_WINDOW

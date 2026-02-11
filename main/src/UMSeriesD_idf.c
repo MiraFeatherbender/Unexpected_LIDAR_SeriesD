@@ -304,7 +304,7 @@ void ums3_i2c_write_reg(max17048_reg_t reg) {
     uint8_t reg_addr = (uint8_t)reg;
     // TODO: Migrate i2c_master_write_to_device to new driver/i2c_master.h API
     esp_err_t err = i2c_master_transmit(
-        max17048_dev_handle, &reg_addr, 1, 100 / portTICK_PERIOD_MS); // <-- OLD I2C DRIVER USAGE
+        max17048_dev_handle, &reg_addr, 1, pdMS_TO_TICKS(300)); // <-- OLD I2C DRIVER USAGE
     if (err != ESP_OK) {
         ESP_LOGE("UMSeriesD", "I2C write_reg failed: %d", err);
     }
@@ -317,7 +317,7 @@ void ums3_i2c_write_reg16(max17048_reg_t reg, uint16_t data) {
     buf[2] = (data & 0x00FF);
     // TODO: Migrate i2c_master_write_to_device to new driver/i2c_master.h API
     esp_err_t err = i2c_master_transmit(
-        max17048_dev_handle, buf, 3, 100 / portTICK_PERIOD_MS); // <-- OLD I2C DRIVER USAGE
+        max17048_dev_handle, buf, 3, pdMS_TO_TICKS(300)); // <-- OLD I2C DRIVER USAGE
     if (err != ESP_OK) {
         ESP_LOGE("UMSeriesD", "I2C write_reg16 failed: %d", err);
     }
@@ -328,7 +328,7 @@ uint16_t ums3_i2c_read_reg16(max17048_reg_t reg) {
     uint8_t data[2] = {0};
     // TODO: Migrate i2c_master_write_read_device to new driver/i2c_master.h API
     esp_err_t err = i2c_master_transmit_receive(
-        max17048_dev_handle, &reg_addr, 1, data, 2, 100 / portTICK_PERIOD_MS); // <-- OLD I2C DRIVER USAGE
+        max17048_dev_handle, &reg_addr, 1, data, 2, pdMS_TO_TICKS(300)); // <-- OLD I2C DRIVER USAGE
     if (err != ESP_OK) {
         ESP_LOGE("UMSeriesD", "I2C read_reg16 failed: %d", err);
         return 0;

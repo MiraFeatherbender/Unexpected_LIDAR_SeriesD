@@ -19,6 +19,7 @@
 #include "mcp23017_test.h"
 #include "io_i2c_oled.h"
 #include "ui_hello.h"
+#include "ui_input_adapter.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -63,6 +64,11 @@ void app_main(void)
     /* Show Hello UI (separate module) */
     if (ui_hello_show() != ESP_OK) {
         ESP_LOGW("ui_hello", "ui_hello_show failed");
+    }
+
+    /* Initialize UI input adapter (encoder -> LVGL indev) */
+    if (ui_input_adapter_init() != ESP_OK) {
+        ESP_LOGW("ui_input", "ui_input_adapter_init failed");
     }
 
     rgb_anim_init_all();

@@ -333,7 +333,7 @@ void blur_channel_float_and_scatter(const float *src, uint8_t *dst_uint8, int wi
     float *tmpf = anim_buffers.channel_float_src; // reuse as temporary
     separable_blur_float(src, tmpf, dstf, width, height, k, ksize);
     // scatter
-    for (int row = 0; row < height; row++) {
+        for (int row = 0; row < height; row++) {
         for (int col = 0; col < width; col++) {
             int src_idx = row * width + col;
             int dst_idx = (row * width + col) * stride;
@@ -345,7 +345,7 @@ void blur_channel_float_and_scatter(const float *src, uint8_t *dst_uint8, int wi
             else s = 1.055f * powf(lin, 1.0f/2.4f) - 0.055f;
             int v = (int)fminf(fmaxf(s * 255.0f, 0.0f), 255.0f);
             dst_uint8[dst_idx] = (uint8_t)v;
-        }
+        	}
     }
 #else
     // pad float input into padded buffer
@@ -431,6 +431,8 @@ static void Load_PNG_Task(void *pvParameters) {
                     }
                 }
 
+                // (previously yielded to watchdog; removed to restore original timing)
+
                 // Build intermediate 8-bit colored (preserve original behavior)
                 for (int i = 0; i < 256 * 256; ++i) {
                     uint16_t idx = *gray++;
@@ -441,6 +443,8 @@ static void Load_PNG_Task(void *pvParameters) {
                     rgb->b = p[2];
                     ++rgb;
                 }
+
+                // (removed brief sleep)
 
                 // Blur contrast RGB channels in linear float space, scatter back to uint8 staging
                 // For each channel: build float src from palette_linear mapped indices, blur in float, convert back
@@ -483,6 +487,7 @@ static void Load_PNG_Task(void *pvParameters) {
                         int v = (int)fminf(fmaxf(s * 255.0f, 0.0f), 255.0f);
                         anim_buffers.brightness_gray_staging[row * 256 + col] = (uint8_t)v;
                     }
+                    	
                 }
 
                 // Promote staging buffers to active

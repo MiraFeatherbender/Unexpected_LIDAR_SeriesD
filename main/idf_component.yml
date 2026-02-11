@@ -2,8 +2,10 @@
 dependencies:
   esp_lcd_sh1107: ^1
   esp_lvgl_port:
-    version: '*'
-  lvgl/lvgl: ^8
+    version: '*'  
+  lvgl/lvgl:
+    version: "^9"
+    public: true
   espressif/esp-dsp:
     version: '*'
   espressif/led_strip:
