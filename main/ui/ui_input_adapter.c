@@ -17,6 +17,7 @@
 
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
+#include "ui_hello.h"
 
 static const char *TAG = "ui_input_adapter";
 
@@ -87,6 +88,11 @@ static void ui_input_worker(void *arg) {
                     break;
             }
 
+            // If rotated while pressed, toggle the Hello UI inversion
+            if (delta != 0 && (btn == BTN_PRESS_START || btn == BTN_HELD)) {
+                ui_hello_toggle_invert();
+            }
+
             // Wake LVGL so the read_cb will be called promptly (LVGL9)
             if (s_ctx.indev) {
                 lvgl_port_task_wake(LVGL_PORT_EVENT_TOUCH, s_ctx.indev);
@@ -110,7 +116,7 @@ esp_err_t ui_input_adapter_init(void) {
     // Register pointer queue for dispatcher target
     dispatcher_register_ptr_queue(TARGET_OLED_INDEV, s_ctx.queue);
 
-    BaseType_t ok = xTaskCreate(ui_input_worker, "ui_input_worker", 3072, NULL, 3, &s_ctx.task);
+    BaseType_t ok = xTaskCreate(ui_input_worker, "ui_input_worker", 3072, NULL, 5, &s_ctx.task);
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "task create failed");
         vQueueDelete(s_ctx.queue);

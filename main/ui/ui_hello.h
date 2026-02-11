@@ -9,6 +9,9 @@ extern "C" {
 // Safe to call after `io_i2c_oled_init()` and LVGL is initialized.
 esp_err_t ui_hello_show(void);
 
+// Toggle the inverted/focused state of the hello label (safe to call from tasks)
+void ui_hello_toggle_invert(void);
+
 #ifdef __cplusplus
 }
 #endif

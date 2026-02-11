@@ -62,9 +62,21 @@ esp_err_t ui_hello_show(void)
 
     /* keep handle and start 3s timer to toggle focus for testing */
     s_label = label;
-    if(!s_toggle_timer) s_toggle_timer = lv_timer_create(toggle_focus_cb, 3000, NULL);
+    // if(!s_toggle_timer) s_toggle_timer = lv_timer_create(toggle_focus_cb, 3000, NULL);
 
     lvgl_port_unlock();
     ESP_LOGI(TAG, "Hello UI created");
     return ESP_OK;
+}
+
+void ui_hello_toggle_invert(void)
+{
+    if (!s_label) return;
+    if (!lvgl_port_lock(0)) {
+        ESP_LOGW(TAG, "ui_hello_toggle_invert: failed to take LVGL lock");
+        return;
+    }
+    if (lv_obj_has_state(s_label, LV_STATE_FOCUSED)) lv_obj_clear_state(s_label, LV_STATE_FOCUSED);
+    else lv_obj_add_state(s_label, LV_STATE_FOCUSED);
+    lvgl_port_unlock();
 }
