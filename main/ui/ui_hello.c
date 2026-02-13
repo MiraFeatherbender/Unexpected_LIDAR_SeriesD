@@ -6,77 +6,52 @@
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
 #include "esp_log.h"
+#include "ui/pages/ui_pages.h"
 
 static const char *TAG = "ui_hello";
 
 static lv_obj_t *s_label = NULL;
-static lv_timer_t *s_toggle_timer = NULL;
+lv_obj_t *img;
 
-static void toggle_focus_cb(lv_timer_t * t)
+static void gif_pause_event_cb(lv_event_t *e)
 {
-    LV_UNUSED(t);
-    if(!s_label) return;
-    if(lv_obj_has_state(s_label, LV_STATE_FOCUSED)) lv_obj_clear_state(s_label, LV_STATE_FOCUSED);
-    else lv_obj_add_state(s_label, LV_STATE_FOCUSED);
-}
+    lv_obj_t *gif = lv_event_get_target(e);
+    lv_gif_pause(gif);
+    
+};
 
 esp_err_t ui_hello_show(void)
 {
-    if (!lvgl_port_lock(0)) {
-        ESP_LOGW(TAG, "Failed to take LVGL lock");
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    lv_disp_set_rotation(lv_disp_get_default(), LV_DISPLAY_ROTATION_0);
-
-    static lv_style_t invert_label_style;
-    lv_style_init(&invert_label_style);
-
-    /* Configure the style (use lv_style_set_* on lv_style_t) */
-    lv_style_set_text_align(&invert_label_style, LV_TEXT_ALIGN_CENTER);
-    lv_style_set_bg_color(&invert_label_style, lv_color_black());
-    lv_style_set_text_color(&invert_label_style, lv_color_white());
-    lv_style_set_bg_opa(&invert_label_style, LV_OPA_COVER);
-
-    static lv_style_t label_style;
-    lv_style_init(&label_style);
-
-    lv_style_set_text_align(&label_style, LV_TEXT_ALIGN_CENTER);
-    lv_style_set_bg_color(&label_style, lv_color_white());
-    lv_style_set_text_color(&label_style, lv_color_black());
-    lv_style_set_bg_opa(&label_style, LV_OPA_COVER);
-
-    lv_obj_t *label = lv_label_create(lv_scr_act());
-    if (!label) {
-        lvgl_port_unlock();
-        ESP_LOGE(TAG, "Failed to create label");
-        return ESP_ERR_NO_MEM;
-    }
-    lv_label_set_text(label, "Hello World");
-
-    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 0);
-
-    lv_obj_add_style(label, &label_style, 0);
-    /* Attach focused-state inverted style */
-    lv_obj_add_style(label, &invert_label_style, LV_STATE_FOCUSED);
-
-    /* keep handle and start 3s timer to toggle focus for testing */
-    s_label = label;
-    // if(!s_toggle_timer) s_toggle_timer = lv_timer_create(toggle_focus_cb, 3000, NULL);
-
-    lvgl_port_unlock();
-    ESP_LOGI(TAG, "Hello UI created");
+    ESP_LOGI(TAG, "ui_hello_show: no-op (widgets removed)");
     return ESP_OK;
 }
 
-void ui_hello_toggle_invert(void)
+// Page descriptor glue so the hello module can be used as a ui_page
+static esp_err_t ui_page_hello_init(void) { return ESP_OK; }
+static void ui_page_hello_deinit(void) { }
+static void ui_page_hello_show(lv_obj_t *parent)
 {
-    if (!s_label) return;
-    if (!lvgl_port_lock(0)) {
-        ESP_LOGW(TAG, "ui_hello_toggle_invert: failed to take LVGL lock");
-        return;
-    }
-    if (lv_obj_has_state(s_label, LV_STATE_FOCUSED)) lv_obj_clear_state(s_label, LV_STATE_FOCUSED);
-    else lv_obj_add_state(s_label, LV_STATE_FOCUSED);
-    lvgl_port_unlock();
+    LV_IMG_DECLARE(face_on_array);
+
+    if (!parent) parent = lv_scr_act();
+
+    img = lv_gif_create(parent);
+        lv_obj_add_event_cb(img, gif_pause_event_cb, LV_EVENT_READY, NULL);
+        lv_gif_set_color_format(img, LV_COLOR_FORMAT_ARGB8888);
+        lv_gif_set_src(img, &face_on_array);
+        lv_obj_align(img, LV_ALIGN_BOTTOM_MID, 0, 0);
+
 }
+
+static void ui_page_hello_hide(void) { /* no-op */ }
+
+const ui_page_t ui_page_HELLO = {
+    .id = UI_PAGE_HELLO,
+    .name = "Hello",
+    .init = ui_page_hello_init,
+    .deinit = ui_page_hello_deinit,
+    .show = ui_page_hello_show,
+    .hide = ui_page_hello_hide,
+};
+
+void ui_hello_toggle_invert(void) { /* no-op; widgets removed */ }

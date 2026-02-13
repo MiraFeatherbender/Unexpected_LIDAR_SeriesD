@@ -45,6 +45,10 @@ idf_component_register(
         # UI elements
         "ui/ui_hello.c"
         "ui/ui_input_adapter.c"
+        "ui/ui_core.c"
+        "ui/pages/ui_page_template.c"
+        "ui/face_animations/face_on_sprite_sheet.c"
+        "ui/face_animations/face_on_array.c"
 
         # Modules
         "plugins/mod_line_sensor_window.c"
@@ -83,6 +87,7 @@ idf_component_register(
         "plugins/battery" # battery_json.h
         "src"             # UMSeriesD_idf.h
         "ui"              # ui modules
+        "ui/pages"        # ui page modules
 )
 
 # Enable floating point support in printf/scanf

@@ -20,6 +20,8 @@
 #include "io_i2c_oled.h"
 #include "ui_hello.h"
 #include "ui_input_adapter.h"
+#include "ui/ui_core.h"
+#include "ui/pages/ui_pages.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -47,6 +49,8 @@ void app_main(void)
     dispatcher_allocator_init();
     dispatcher_pool_init();
     dispatcher_init();
+
+
     io_log_init();
     io_gpio_init();
     io_ultrasonic_init();
@@ -58,24 +62,13 @@ void app_main(void)
     io_MCP23017_init();
     mcp23017_test_start();
 
-    /* Initialize I2C OLED example (reuses existing I2C bus if present) */
-    io_i2c_oled_init(NULL);
-
-    /* Show Hello UI (separate module) */
-    if (ui_hello_show() != ESP_OK) {
-        ESP_LOGW("ui_hello", "ui_hello_show failed");
-    }
-
-    /* Initialize UI input adapter (encoder -> LVGL indev) */
-    if (ui_input_adapter_init() != ESP_OK) {
-        ESP_LOGW("ui_input", "ui_input_adapter_init failed");
-    }
-
     rgb_anim_init_all();
     io_rgb_init();
 
-
-
+    io_i2c_oled_init(NULL);
+    ui_core_init();
+    ui_core_show_page(UI_PAGE_HELLO);
+    ui_input_adapter_init();
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
