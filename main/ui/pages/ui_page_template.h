@@ -5,7 +5,7 @@
 // Template page id (pick an unused id when copying)
 
 // Page API
-esp_err_t ui_page_template_init(void);
+esp_err_t ui_page_template_init(lv_obj_t *parent);
 void ui_page_template_deinit(void);
 void ui_page_template_show(lv_obj_t *parent);
 void ui_page_template_hide(void);

@@ -1,7 +1,3 @@
-/* ui_hello.c
- * Minimal UI module that creates a Hello World label on the active LVGL screen.
- */
-
 #include "ui_hello.h"
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
@@ -10,6 +6,7 @@
 
 static const char *TAG = "ui_hello";
 
+LV_IMG_DECLARE(face_on_array);
 static lv_obj_t *s_label = NULL;
 lv_obj_t *img;
 
@@ -20,30 +17,36 @@ static void gif_pause_event_cb(lv_event_t *e)
     
 };
 
-esp_err_t ui_hello_show(void)
-{
-    ESP_LOGI(TAG, "ui_hello_show: no-op (widgets removed)");
-    return ESP_OK;
-}
-
 // Page descriptor glue so the hello module can be used as a ui_page
-static esp_err_t ui_page_hello_init(void) { return ESP_OK; }
-static void ui_page_hello_deinit(void) { }
-static void ui_page_hello_show(lv_obj_t *parent)
+static esp_err_t ui_page_hello_init(lv_obj_t *parent)
 {
-    LV_IMG_DECLARE(face_on_array);
 
     if (!parent) parent = lv_scr_act();
 
     img = lv_gif_create(parent);
+    if (img) {
         lv_obj_add_event_cb(img, gif_pause_event_cb, LV_EVENT_READY, NULL);
         lv_gif_set_color_format(img, LV_COLOR_FORMAT_ARGB8888);
-        lv_gif_set_src(img, &face_on_array);
         lv_obj_align(img, LV_ALIGN_BOTTOM_MID, 0, 0);
-
+    }
+    return ESP_OK;
 }
 
-static void ui_page_hello_hide(void) { /* no-op */ }
+static void ui_page_hello_deinit(void) {
+    if (img) {
+        lv_obj_del(img);
+        img = NULL;
+    }
+}
+
+static void ui_page_hello_show(lv_obj_t *parent)
+{
+    (void)parent; /* widgets created in init(parent) */
+    
+        lv_gif_set_src(img, &face_on_array);
+}
+
+static void ui_page_hello_hide(void) { /* stop timers/animations when we add them */ }
 
 const ui_page_t ui_page_HELLO = {
     .id = UI_PAGE_HELLO,
@@ -54,4 +57,3 @@ const ui_page_t ui_page_HELLO = {
     .hide = ui_page_hello_hide,
 };
 
-void ui_hello_toggle_invert(void) { /* no-op; widgets removed */ }

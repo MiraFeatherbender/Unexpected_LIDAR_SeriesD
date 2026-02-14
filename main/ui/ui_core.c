@@ -63,12 +63,12 @@ esp_err_t ui_core_show_page(int page_id)
         return ESP_OK;
     }
 
-    // Fallback: call init only (do not show) and update index
-    if (s_pages[idx] && s_pages[idx]->init) {
-        if (s_pages[idx]->init() != ESP_OK) {
-            ESP_LOGW(TAG, "page init failed id=%d", s_pages[idx]->id);
-        }
-    }
+    // // Fallback: call init only (do not show) and update index
+    // if (s_pages[idx] && s_pages[idx]->init) {
+    //     if (s_pages[idx]->init() != ESP_OK) {
+    //         ESP_LOGW(TAG, "page init failed id=%d", s_pages[idx]->id);
+    //     }
+    // }
     s_active_index = idx;
     // ESP_LOGI(TAG, "show page id=%d index=%d", page_id, idx);
     return ESP_OK;
@@ -123,7 +123,7 @@ esp_err_t ui_core_init(void)
                 }
                 if (p) {
                     if (p->init) {
-                        if (p->init() != ESP_OK) {
+                        if (p->init(tile) != ESP_OK) {
                             ESP_LOGW(TAG, "page init failed id=%d", p->id);
                         }
                     }

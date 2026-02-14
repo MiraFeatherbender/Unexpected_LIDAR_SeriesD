@@ -47,7 +47,6 @@ idf_component_register(
         "ui/ui_input_adapter.c"
         "ui/ui_core.c"
         "ui/pages/ui_page_template.c"
-        "ui/face_animations/face_on_sprite_sheet.c"
         "ui/face_animations/face_on_array.c"
 
         # Modules
