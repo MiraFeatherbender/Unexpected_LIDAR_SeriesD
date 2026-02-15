@@ -57,6 +57,12 @@ esp_err_t ui_core_show_page(int page_id)
             // lv_label_set_text(s_title_overlay, s_pages[idx]->name);
             lv_label_set_text_fmt(s_title_overlay, "%s %s %s", "", s_pages[idx]->name, "");
         }
+        /* Invoke per-activation hook so the page can start timers/animations.
+         * show() is used as the activation entry point to keep a single
+         * callback for pages (existing pages already implement show()). */
+        if (s_pages[idx] && s_pages[idx]->show && s_tile_pages[idx]) {
+            s_pages[idx]->show(s_tile_pages[idx]);
+        }
         lvgl_port_unlock();
         s_active_index = idx;
         // ESP_LOGI(TAG, "show page (tile) id=%d index=%d", page_id, idx);
@@ -127,12 +133,17 @@ esp_err_t ui_core_init(void)
                             ESP_LOGW(TAG, "page init failed id=%d", p->id);
                         }
                     }
-                    if (p->show && tile) p->show(tile);
+                    /* Do not call p->show() here; show() will be invoked when the
+                     * page becomes active to separate one-time creation from
+                     * per-activation behavior. */
                 }
             }
 
-            // activate first tile
+            // activate first tile and call its show() (per-activation hook)
             lv_tileview_set_tile_by_index(s_tileview, 0, 0, LV_ANIM_OFF);
+            if (UI_PAGE_COUNT > 0 && s_pages[0] && s_pages[0]->show && s_tile_pages[0]) {
+                s_pages[0]->show(s_tile_pages[0]);
+            }
             s_active_index = 0;
             // create title overlay above tiles (use dark-mode style)
             s_title_overlay = lv_label_create(scr);

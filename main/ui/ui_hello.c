@@ -7,13 +7,64 @@
 static const char *TAG = "ui_hello";
 
 LV_IMG_DECLARE(face_on_array);
+LV_IMG_DECLARE(standby_face_array);
+LV_IMG_DECLARE(blink_array);
+LV_IMG_DECLARE(face_off_array);
+
+typedef enum {
+    HELLO_STEP_FACE_ON = 0,
+    HELLO_STEP_STANDBY,
+    HELLO_STEP_BLINK,
+    HELLO_STEP_FACE_OFF,
+    HELLO_STEP_NULL,
+} hello_state_t;
+
+static hello_state_t s_state = HELLO_STEP_NULL;
+static bool s_busy = true;
+
 static lv_obj_t *s_label = NULL;
 lv_obj_t *img;
 
+static void hello_step(void){
+
+    if(s_busy) return;
+    lv_gif_pause(img);
+
+    switch (s_state){
+        case HELLO_STEP_FACE_ON:
+            lv_gif_set_src(img, &face_on_array);
+            s_state = HELLO_STEP_BLINK;
+            break;
+        case HELLO_STEP_STANDBY:
+            lv_gif_set_src(img, &standby_face_array);
+            s_state = HELLO_STEP_BLINK;
+            break;
+        case HELLO_STEP_BLINK:
+            lv_gif_set_src(img, &blink_array);
+            s_state = HELLO_STEP_FACE_OFF;
+            break;
+        case HELLO_STEP_FACE_OFF:
+            lv_gif_set_src(img, &face_off_array);
+            s_state = HELLO_STEP_NULL;
+            break;
+        default:
+            lv_gif_set_src(img, NULL);
+            break;
+    }
+
+    s_busy = true;
+    lv_gif_set_loop_count(img, 1);
+    lv_gif_restart(img);
+
+    return;
+
+}
+
 static void gif_pause_event_cb(lv_event_t *e)
 {
-    lv_obj_t *gif = lv_event_get_target(e);
-    lv_gif_pause(gif);
+    (void)e;
+    s_busy = false;
+    hello_step();
     
 };
 
@@ -43,7 +94,12 @@ static void ui_page_hello_show(lv_obj_t *parent)
 {
     (void)parent; /* widgets created in init(parent) */
     
-        lv_gif_set_src(img, &face_on_array);
+    s_busy = false;
+    s_state = HELLO_STEP_FACE_ON;
+    hello_step();
+        // lv_gif_set_src(img, &face_on_array);
+        // lv_gif_set_loop_count(img, 1);
+
 }
 
 static void ui_page_hello_hide(void) { /* stop timers/animations when we add them */ }

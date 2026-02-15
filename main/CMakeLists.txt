@@ -48,6 +48,9 @@ idf_component_register(
         "ui/ui_core.c"
         "ui/pages/ui_page_template.c"
         "ui/face_animations/face_on_array.c"
+        "ui/face_animations/face_off_array.c"
+        "ui/face_animations/blink_array.c"
+        "ui/face_animations/standby_face_array.c"
 
         # Modules
         "plugins/mod_line_sensor_window.c"
