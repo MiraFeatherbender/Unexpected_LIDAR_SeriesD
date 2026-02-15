@@ -48,9 +48,18 @@ esp_err_t ui_core_show_page(int page_id)
     int idx = find_page_index_by_id(page_id);
     if (idx < 0) return ESP_ERR_NOT_FOUND;
 
+    // No-op if already on this page
+    if (idx == s_active_index) return ESP_OK;
+
     // If we have a tileview, activate the corresponding tile (columns = page index)
     if (s_tileview) {
+        int prev_idx = s_active_index;
         lvgl_port_lock(0);
+        // Invoke per-deactivation hook on the page being left.
+        if (prev_idx >= 0 && prev_idx < UI_PAGE_COUNT && s_pages[prev_idx] && s_pages[prev_idx]->hide) {
+            s_pages[prev_idx]->hide();
+        }
+
         lv_tileview_set_tile_by_index(s_tileview, idx, 0, LV_ANIM_ON);
         // update title overlay to current page name
         if (s_title_overlay && s_pages[idx] && s_pages[idx]->name) {
