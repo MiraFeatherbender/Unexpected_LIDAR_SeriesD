@@ -7,7 +7,7 @@
 
 static const char *TAG = "ui_page_template";
 static lv_obj_t *s_container = NULL;
-static lv_obj_t *temp_label = NULL;
+static lv_obj_t *template_label = NULL;
 
 
 static esp_err_t ui_page_template_init(lv_obj_t *parent)
@@ -23,11 +23,10 @@ static esp_err_t ui_page_template_init(lv_obj_t *parent)
         lv_obj_add_style(s_container, &ui_style_dark_mode, 0);
     }
     
-    temp_label = lv_label_create(s_container);
-    if (temp_label) {
-        lv_obj_set_align(temp_label, LV_ALIGN_CENTER);
-        lv_obj_add_style(temp_label, &ui_style_dark_mode, 0);
-        lv_label_set_text(temp_label, "Template page");
+    template_label = lv_label_create(s_container);
+    if (template_label) {
+        lv_obj_set_align(template_label, LV_ALIGN_CENTER);
+        lv_obj_add_style(template_label, &ui_style_dark_mode, 0);
     }
     return ESP_OK;
 }
@@ -38,13 +37,15 @@ static void ui_page_template_deinit(void)
     if (s_container) {
         lv_obj_del(s_container);
         s_container = NULL;
-        temp_label = NULL;
+        template_label = NULL;
     }
 }
 
 static void ui_page_template_show(lv_obj_t *parent)
 {
     (void)parent; /* widgets created in init(parent) */
+    
+    lv_label_set_text(template_label, "Template page");
 }
 
 static void ui_page_template_hide(void)
