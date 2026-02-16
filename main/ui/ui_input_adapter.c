@@ -17,7 +17,6 @@
 
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
-#include "ui_hello.h"
 
 static const char *TAG = "ui_input_adapter";
 

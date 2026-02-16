@@ -2,3 +2,5 @@
 2026-02-10: Refactored `io_i2c_oled.c` to remove embedded Hello World UI; added `main/ui/ui_hello.c` and `main/ui/ui_hello.h`. (assistant)
 2026-02-10: Updated `main/CMakeLists.txt` to compile `ui/ui_hello.c` and added `ui` to `INCLUDE_DIRS`; updated `main.c` to call `ui_hello_show()`. (assistant)
 2026-02-10: Added `external_docs.md` with LVGL API docs link for quick reference. (assistant)
+2026-02-15: Centralized `ui_page_template` logic in source-only module (removed `ui_page_template.h`) and removed all `ui_hello.h` include references from UI/main sources. (assistant)
+2026-02-15: Removed unused placeholder header `main/ui/ui_hello.h` after eliminating all include dependencies. (assistant)

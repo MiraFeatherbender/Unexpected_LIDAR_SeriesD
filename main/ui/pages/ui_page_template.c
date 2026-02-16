@@ -1,4 +1,4 @@
-#include "ui/pages/ui_page_template.h"
+#include "ui/pages/ui_page.h"
 #include "ui/pages/ui_pages.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
@@ -10,7 +10,7 @@ static lv_obj_t *s_container = NULL;
 static lv_obj_t *temp_label = NULL;
 
 
-esp_err_t ui_page_template_init(lv_obj_t *parent)
+static esp_err_t ui_page_template_init(lv_obj_t *parent)
 {
     ESP_LOGI(TAG, "template init");
     if (!parent) parent = lv_scr_act();
@@ -32,7 +32,7 @@ esp_err_t ui_page_template_init(lv_obj_t *parent)
     return ESP_OK;
 }
 
-void ui_page_template_deinit(void)
+static void ui_page_template_deinit(void)
 {
     ESP_LOGI(TAG, "template deinit");
     if (s_container) {
@@ -42,12 +42,12 @@ void ui_page_template_deinit(void)
     }
 }
 
-void ui_page_template_show(lv_obj_t *parent)
+static void ui_page_template_show(lv_obj_t *parent)
 {
     (void)parent; /* widgets created in init(parent) */
 }
 
-void ui_page_template_hide(void)
+static void ui_page_template_hide(void)
 {
     /* stop timers or animations here if any; widgets are deleted in deinit() */
 }

@@ -18,7 +18,6 @@
 #include "mod_line_sensor_window.h"
 #include "mcp23017_test.h"
 #include "io_i2c_oled.h"
-#include "ui_hello.h"
 #include "ui_input_adapter.h"
 #include "ui/ui_core.h"
 #include "ui/pages/ui_pages.h"
@@ -60,7 +59,7 @@ void app_main(void)
     io_wifi_ap_init();
     io_battery_init();
     io_MCP23017_init();
-    mcp23017_test_start();
+    // mcp23017_test_start();
 
     rgb_anim_init_all();
     io_rgb_init();
