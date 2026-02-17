@@ -5,6 +5,7 @@
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
 #include "ui_input_adapter.h"
+#include "ui_dispatch_bridge.h"
 #include "ui_styles.h"
 
 static const char *TAG = "ui_core";
@@ -107,6 +108,9 @@ esp_err_t ui_core_init(void)
 {
     // nothing heavy here; pages are auto-registered via pages.def
     ESP_LOGI(TAG, "ui_core initialized (pages=%d)", UI_PAGE_COUNT);
+    if (ui_dispatch_bridge_init() != ESP_OK) {
+        ESP_LOGW(TAG, "ui_dispatch_bridge_init failed");
+    }
     // Register the page-callback so press+rotate navigates pages.
     ui_input_set_page_callback(ui_core_page_cb);
 
@@ -202,5 +206,6 @@ void ui_core_deinit(void)
         s_title_overlay = NULL;
     }
     lvgl_port_unlock();
+    ui_dispatch_bridge_deinit();
     s_active_index = -1;
 }

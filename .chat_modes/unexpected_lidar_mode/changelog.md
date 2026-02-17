@@ -4,3 +4,5 @@
 2026-02-10: Added `external_docs.md` with LVGL API docs link for quick reference. (assistant)
 2026-02-15: Centralized `ui_page_template` logic in source-only module (removed `ui_page_template.h`) and removed all `ui_hello.h` include references from UI/main sources. (assistant)
 2026-02-15: Removed unused placeholder header `main/ui/ui_hello.h` after eliminating all include dependencies. (assistant)
+2026-02-16: Added send-only `ui_dispatch_bridge` module (`main/ui/ui_dispatch_bridge.[ch]`), wired bridge init/deinit in `ui_core`, and connected `ui_page_encoder_test` commit-on-deselect to publish log messages via dispatcher `TARGET_LOG`. (assistant)
+2026-02-16: Refactored `ui_dispatch_bridge` primary send API to accept `dispatcher_pool_send_params_t` and retained `ui_dispatch_bridge_send_text()` as a convenience wrapper. (assistant)
