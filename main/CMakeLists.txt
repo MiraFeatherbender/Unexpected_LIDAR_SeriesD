@@ -46,6 +46,8 @@ idf_component_register(
         "ui/ui_hello.c"
         "ui/ui_dispatch_bridge.c"
         "ui/ui_encoder_accel.c"
+        "ui/ui_styles.c"
+        "ui/ui_setting_item.c"
         "ui/ui_input_adapter.c"
         "ui/ui_core.c"
         "ui/pages/ui_page_template.c"

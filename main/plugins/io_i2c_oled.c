@@ -23,6 +23,7 @@
 
 static const char *TAG = "io_i2c_oled";
 
+#define IO_I2C_OLED_INVERT_COLORS 1
 #define I2C_HOST  0
 #define EXAMPLE_I2C_HW_ADDR 0x3C
 #define EXAMPLE_LCD_H_RES 128
@@ -110,6 +111,9 @@ esp_err_t io_i2c_oled_init(const i2c_master_bus_config_t *user_bus_cfg)
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
+#if IO_I2C_OLED_INVERT_COLORS
+    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, true));
+#endif
 
     ESP_LOGI(TAG, "Initialize LVGL");
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();

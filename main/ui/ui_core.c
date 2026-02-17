@@ -31,6 +31,15 @@ static lv_obj_t *s_tile_pages[UI_PAGE_COUNT];
 static lv_obj_t *s_title_overlay = NULL;
 // Status overlay (e.g., battery symbol) drawn above the title
 static lv_obj_t *s_status_overlay = NULL;
+// Page indicator bar: range-mode bar at top center to show current page
+static lv_obj_t *s_page_indicator_bar = NULL;
+// Page indicator common style (shared by background and indicator)
+static lv_style_t s_page_indicator_common_style;
+
+static lv_style_t *ui_core_page_bg_style(void)
+{
+    return &ui_style_light_mode;
+}
 
 // Page callback used by the input adapter. Defined at file scope to avoid
 // nested-function issues on C compilers.
@@ -64,8 +73,13 @@ esp_err_t ui_core_show_page(int page_id)
         lv_tileview_set_tile_by_index(s_tileview, idx, 0, LV_ANIM_ON);
         // update title overlay to current page name
         if (s_title_overlay && s_pages[idx] && s_pages[idx]->name) {
-            // lv_label_set_text(s_title_overlay, s_pages[idx]->name);
-            lv_label_set_text_fmt(s_title_overlay, "%s %s %s", "", s_pages[idx]->name, "");
+            lv_label_set_text(s_title_overlay, s_pages[idx]->name);
+        }
+        // update page indicator bar to show current page progress
+        // Range mode: indicator spans from current page to current page + 1
+        if (s_page_indicator_bar) {
+            lv_bar_set_start_value(s_page_indicator_bar, idx, LV_ANIM_ON);
+            lv_bar_set_value(s_page_indicator_bar, idx + 1, LV_ANIM_ON);
         }
         /* Invoke per-activation hook so the page can start timers/animations.
          * show() is used as the activation entry point to keep a single
@@ -75,18 +89,10 @@ esp_err_t ui_core_show_page(int page_id)
         }
         lvgl_port_unlock();
         s_active_index = idx;
-        // ESP_LOGI(TAG, "show page (tile) id=%d index=%d", page_id, idx);
         return ESP_OK;
     }
 
-    // // Fallback: call init only (do not show) and update index
-    // if (s_pages[idx] && s_pages[idx]->init) {
-    //     if (s_pages[idx]->init() != ESP_OK) {
-    //         ESP_LOGW(TAG, "page init failed id=%d", s_pages[idx]->id);
-    //     }
-    // }
     s_active_index = idx;
-    // ESP_LOGI(TAG, "show page id=%d index=%d", page_id, idx);
     return ESP_OK;
 }
 
@@ -131,14 +137,14 @@ esp_err_t ui_core_init(void)
         s_tileview = lv_tileview_create(scr);
         if (s_tileview) {
             lv_obj_set_size(s_tileview, sw, sh);
-            lv_obj_add_style(s_tileview, &ui_style_dark_mode, 0);
+            lv_obj_add_style(s_tileview, ui_core_page_bg_style(), LV_PART_MAIN | LV_STATE_DEFAULT);
             // create one column per page in row 0
             for (int i = 0; i < UI_PAGE_COUNT; ++i) {
                 const ui_page_t *p = s_pages[i];
                 lv_obj_t *tile = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
                 s_tile_pages[i] = tile;
                 if (tile) {
-                    lv_obj_add_style(tile, &ui_style_dark_mode, 0);
+                    lv_obj_add_style(tile, ui_core_page_bg_style(), LV_PART_MAIN | LV_STATE_DEFAULT);
                 }
                 if (p) {
                     if (p->init) {
@@ -174,11 +180,42 @@ esp_err_t ui_core_init(void)
                 if (s_status_overlay) {
                     lv_obj_add_style(s_status_overlay, &ui_style_dark_mode, 0);
                     lv_obj_set_size(s_status_overlay, 128, 16);
-                    lv_obj_align(s_status_overlay, LV_ALIGN_TOP_MID, 0, -2);
+                    lv_obj_align(s_status_overlay, LV_ALIGN_TOP_MID, -1, -2);
                     lv_obj_set_style_bg_opa(s_status_overlay, LV_OPA_TRANSP, 0);
                     lv_label_set_text(s_status_overlay, LV_SYMBOL_BATTERY_FULL);
                     lv_obj_set_style_text_font(s_status_overlay, &lv_font_montserrat_14, 0);
                     lv_obj_set_style_text_align(s_status_overlay, LV_TEXT_ALIGN_RIGHT, 0);
+                }
+
+                // Create page indicator bar at top center (5px tall, 128px wide)
+                // Shows current page position as a range indicator
+                // Initialize common style properties (shared by background and indicator)
+                lv_style_init(&s_page_indicator_common_style);
+                lv_style_set_border_color(&s_page_indicator_common_style, lv_color_black());
+                lv_style_set_border_width(&s_page_indicator_common_style, 1);
+                lv_style_set_border_opa(&s_page_indicator_common_style, LV_OPA_COVER);
+                lv_style_set_border_side(&s_page_indicator_common_style, LV_BORDER_SIDE_TOP | LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT);
+                lv_style_set_pad_all(&s_page_indicator_common_style, 1);
+                lv_style_set_radius(&s_page_indicator_common_style, 0);
+                lv_style_set_bg_opa(&s_page_indicator_common_style, LV_OPA_COVER);
+
+                s_page_indicator_bar = lv_bar_create(scr);
+                if (s_page_indicator_bar) {
+                    // Apply common style to both background and indicator
+                    lv_obj_add_style(s_page_indicator_bar, &s_page_indicator_common_style, 0);
+                    lv_obj_add_style(s_page_indicator_bar, &s_page_indicator_common_style, LV_PART_INDICATOR);
+                    // Apply specific colors: black background, white indicator
+                    lv_obj_set_style_bg_color(s_page_indicator_bar, lv_color_black(), 0);
+                    lv_obj_set_style_anim_duration(s_page_indicator_bar, 300, 0);
+                    lv_obj_set_style_bg_color(s_page_indicator_bar, lv_color_white(), LV_PART_INDICATOR);
+                    
+                    lv_obj_set_size(s_page_indicator_bar, 128, 5);
+                    lv_obj_align(s_page_indicator_bar, LV_ALIGN_TOP_MID, 0, 11);
+                    lv_bar_set_mode(s_page_indicator_bar, LV_BAR_MODE_RANGE);
+                    lv_bar_set_range(s_page_indicator_bar, 0, UI_PAGE_COUNT > 1 ? UI_PAGE_COUNT : 0);
+                    // Initialize to first page (0 to 1)
+                    lv_bar_set_start_value(s_page_indicator_bar, 0, LV_ANIM_OFF);
+                    lv_bar_set_value(s_page_indicator_bar, 1, LV_ANIM_OFF);
                 }
             }
         } else {
@@ -204,6 +241,10 @@ void ui_core_deinit(void)
     if (s_title_overlay) {
         lv_obj_del(s_title_overlay);
         s_title_overlay = NULL;
+    }
+    if (s_page_indicator_bar) {
+        lv_obj_del(s_page_indicator_bar);
+        s_page_indicator_bar = NULL;
     }
     lvgl_port_unlock();
     ui_dispatch_bridge_deinit();

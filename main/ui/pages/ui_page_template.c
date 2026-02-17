@@ -20,13 +20,13 @@ static esp_err_t ui_page_template_init(lv_obj_t *parent)
         lv_obj_set_size(s_container, lv_obj_get_width(parent), lv_obj_get_height(parent) - 16);
         lv_obj_set_align(s_container, LV_ALIGN_BOTTOM_MID);
         lv_obj_clear_flag(s_container, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_style(s_container, &ui_style_dark_mode, 0);
+        lv_obj_add_style(s_container, &ui_style_light_mode, 0);
     }
     
     template_label = lv_label_create(s_container);
     if (template_label) {
         lv_obj_set_align(template_label, LV_ALIGN_CENTER);
-        lv_obj_add_style(template_label, &ui_style_dark_mode, 0);
+        lv_obj_add_style(template_label, &ui_style_light_mode, 0);
     }
     return ESP_OK;
 }

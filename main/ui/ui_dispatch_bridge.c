@@ -48,7 +48,7 @@ esp_err_t ui_dispatch_bridge_send_text(dispatch_source_t source,
     targets[0] = target;
 
     dispatcher_pool_send_params_t params = {
-        .type = DISPATCHER_POOL_CONTROL,
+        .type = DISPATCHER_POOL_STREAMING,
         .source = source,
         .targets = targets,
         .data = (const uint8_t *)text,
