@@ -52,6 +52,8 @@ idf_component_register(
         "ui/ui_core.c"
         "ui/pages/ui_page_template.c"
         "ui/pages/ui_page_encoder_test.c"
+        "ui/pages/ui_page_settings.c"
+        "ui/pages/ui_page_settings_fnl_example.c"
         "ui/face_animations/face_on_array.c"
         "ui/face_animations/face_off_array.c"
         "ui/face_animations/blink_array.c"

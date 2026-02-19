@@ -1,5 +1,6 @@
 #include "ui_setting_item.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -22,8 +23,8 @@ static void ui_setting_item_bar_draw_value_cb(lv_event_t *e)
     lv_obj_t *obj = lv_event_get_target_obj(e);
     if (!item || !obj) return;
 
-    int32_t minv = item->min_value.i32;
-    int32_t maxv = item->max_value.i32;
+    int32_t minv = lv_bar_get_min_value(obj);
+    int32_t maxv = lv_bar_get_max_value(obj);
     int32_t value = lv_bar_get_value(obj);
     int32_t range = maxv - minv;
     if (range <= 0) return;
@@ -36,8 +37,18 @@ static void ui_setting_item_bar_draw_value_cb(lv_event_t *e)
     lv_draw_label_dsc_init(&label_dsc);
     label_dsc.font = LV_FONT_DEFAULT;
 
-    char buf[16];
-    lv_snprintf(buf, sizeof(buf), "%d", (int)value);
+    char buf[24];
+    if (item->value_type == UI_SETTING_VALUE_FLOAT) {
+        int32_t scale = (item->bar_scale > 0) ? item->bar_scale : 1;
+        int64_t num = (int64_t)value * 1000;
+        int32_t milli = (int32_t)((num >= 0) ? ((num + scale / 2) / scale) : ((num - scale / 2) / scale));
+        int32_t abs_milli = (milli < 0) ? -milli : milli;
+        int32_t whole = abs_milli / 1000;
+        int32_t frac = abs_milli % 1000;
+        lv_snprintf(buf, sizeof(buf), "%s%d.%03d", (milli < 0) ? "-" : "", (int)whole, (int)frac);
+    } else {
+        lv_snprintf(buf, sizeof(buf), "%d", (int)value);
+    }
 
     lv_point_t txt_size;
     lv_text_get_size(&txt_size, buf, label_dsc.font, label_dsc.letter_space, label_dsc.line_space, LV_COORD_MAX,
@@ -75,6 +86,47 @@ static int32_t ui_setting_item_clamp_i32(int32_t value, int32_t minv, int32_t ma
     return value;
 }
 
+static float ui_setting_item_clamp_f32(float value, float minv, float maxv)
+{
+    if (value < minv) return minv;
+    if (value > maxv) return maxv;
+    return value;
+}
+
+static int32_t ui_setting_item_default_bar_scale(const ui_setting_item_config_t *cfg)
+{
+    if (!cfg) return 1;
+    if (cfg->value_type != UI_SETTING_VALUE_FLOAT) return 1;
+
+    float max_abs = fabsf(cfg->min_value.f32);
+    float abs_max = fabsf(cfg->max_value.f32);
+    if (abs_max > max_abs) max_abs = abs_max;
+
+    int32_t scale = 1000;
+    if (max_abs > 0.0f) {
+        float lim = 1000000.0f / max_abs;
+        if (lim < 1000.0f) {
+            int32_t s = (int32_t)lim;
+            if (s < 1) s = 1;
+            scale = s;
+        }
+    }
+
+    return scale;
+}
+
+static int32_t ui_setting_item_to_bar_value(const ui_setting_item_t *item, float value)
+{
+    if (!item || item->bar_scale <= 0) return 0;
+    return (int32_t)lroundf(value * (float)item->bar_scale);
+}
+
+static float ui_setting_item_from_bar_value(const ui_setting_item_t *item, int32_t bar_value)
+{
+    if (!item || item->bar_scale <= 0) return 0.0f;
+    return (float)bar_value / (float)item->bar_scale;
+}
+
 static void ui_setting_item_reset_accel_runtime(ui_setting_item_t *item)
 {
     if (!item) return;
@@ -100,6 +152,9 @@ static void ui_setting_item_sync_value(ui_setting_item_t *item)
             }
             if (item->bar) lv_bar_set_value(item->bar, item->value.i32, LV_ANIM_OFF);
             break;
+        case UI_SETTING_VALUE_FLOAT:
+            if (item->bar) lv_bar_set_value(item->bar, ui_setting_item_to_bar_value(item, item->value.f32), LV_ANIM_OFF);
+            break;
         default:
             break;
     }
@@ -113,6 +168,9 @@ static esp_err_t ui_setting_item_send(ui_setting_item_t *item)
     switch (item->value_type) {
         case UI_SETTING_VALUE_INT32:
             snprintf(msg, sizeof(msg), "%s=%ld", item->name ? item->name : "value", (long)item->value.i32);
+            break;
+        case UI_SETTING_VALUE_FLOAT:
+            snprintf(msg, sizeof(msg), "%s=%.6f", item->name ? item->name : "value", (double)item->value.f32);
             break;
         default:
             return ESP_ERR_NOT_SUPPORTED;
@@ -169,6 +227,7 @@ esp_err_t ui_setting_item_create_labels(ui_setting_item_t *item, lv_obj_t *paren
     item->source = cfg->source;
     item->target = cfg->target;
     item->pool_type = cfg->pool_type;
+    item->bar_scale = ui_setting_item_default_bar_scale(cfg);
 
     item->name_label = lv_label_create(parent);
     if (!item->name_label) return ESP_ERR_NO_MEM;
@@ -193,6 +252,9 @@ esp_err_t ui_setting_item_create_labels(ui_setting_item_t *item, lv_obj_t *paren
             lv_subject_init_int(&item->value_subject, item->value.i32);
             item->value_subject_initialized = true;
             lv_label_bind_text(item->value_label, &item->value_subject, "%d");
+            break;
+        case UI_SETTING_VALUE_FLOAT:
+            lv_label_set_text_fmt(item->value_label, "%.3f", (double)item->value.f32);
             break;
         default:
             return ESP_ERR_NOT_SUPPORTED;
@@ -220,6 +282,12 @@ esp_err_t ui_setting_item_create_bar(ui_setting_item_t *item, lv_obj_t *parent, 
     item->source = cfg->source;
     item->target = cfg->target;
     item->pool_type = cfg->pool_type;
+    item->bar_scale = ui_setting_item_default_bar_scale(cfg);
+
+    if (item->value_type == UI_SETTING_VALUE_FLOAT) {
+        item->accel.base_step *= (float)item->bar_scale;
+        if (item->accel.base_step < 1.0f) item->accel.base_step = 1.0f;
+    }
 
     item->name_label = lv_label_create(parent);
     if (!item->name_label) return ESP_ERR_NO_MEM;
@@ -254,6 +322,12 @@ esp_err_t ui_setting_item_create_bar(ui_setting_item_t *item, lv_obj_t *parent, 
     switch (item->value_type) {
         case UI_SETTING_VALUE_INT32:
             lv_bar_set_range(item->bar, item->min_value.i32, item->max_value.i32);
+            lv_obj_add_event_cb(item->bar, ui_setting_item_bar_draw_value_cb, LV_EVENT_DRAW_MAIN_END, item);
+            break;
+        case UI_SETTING_VALUE_FLOAT:
+            lv_bar_set_range(item->bar,
+                             ui_setting_item_to_bar_value(item, item->min_value.f32),
+                             ui_setting_item_to_bar_value(item, item->max_value.f32));
             lv_obj_add_event_cb(item->bar, ui_setting_item_bar_draw_value_cb, LV_EVENT_DRAW_MAIN_END, item);
             break;
         default:
@@ -327,6 +401,28 @@ void ui_setting_item_handle_encoder(ui_setting_item_t *item, int8_t dir, int64_t
                     next = ui_setting_item_clamp_i32(next, item->min_value.i32, item->max_value.i32);
                     item->value.i32 = next;
                     if (next != prev) {
+                        item->dirty = true;
+                        ui_setting_item_sync_value(item);
+                        ui_setting_item_commit(item, UI_SETTING_COMMIT_REASON_ROTATE);
+                    }
+                    break;
+                }
+                case UI_SETTING_VALUE_FLOAT: {
+                    int32_t prev_bar = ui_setting_item_to_bar_value(item, item->value.f32);
+                    int32_t delta = ui_encoder_accel_apply(&item->accel, dir, now_ms);
+                    int32_t next_bar = prev_bar + delta;
+
+                    int32_t min_bar = ui_setting_item_to_bar_value(item, item->min_value.f32);
+                    int32_t max_bar = ui_setting_item_to_bar_value(item, item->max_value.f32);
+                    next_bar = ui_setting_item_clamp_i32(next_bar, min_bar, max_bar);
+
+                    float next = ui_setting_item_clamp_f32(
+                        ui_setting_item_from_bar_value(item, next_bar),
+                        item->min_value.f32,
+                        item->max_value.f32);
+
+                    if (next != item->value.f32) {
+                        item->value.f32 = next;
                         item->dirty = true;
                         ui_setting_item_sync_value(item);
                         ui_setting_item_commit(item, UI_SETTING_COMMIT_REASON_ROTATE);

@@ -69,6 +69,7 @@ typedef struct {
     dispatch_source_t source;
     dispatch_target_t target;
     dispatcher_pool_type_t pool_type;
+    int32_t bar_scale;
 
     bool selected;
     bool dirty;
