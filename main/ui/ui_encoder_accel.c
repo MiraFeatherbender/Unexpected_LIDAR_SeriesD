@@ -36,7 +36,11 @@ int32_t ui_encoder_accel_apply(ui_encoder_accel_t *cfg, int8_t dir, int64_t now_
     cfg->accum -= (cfg->accum * decay);
 
     float velocity = (ui_encoder_accel_absf((float)dir) * 1000.0f) / (float)dt_ms;
-    cfg->accum += cfg->gain_k * velocity;
+    float norm_accum = (cfg->accel_max > 0.0f) ? (cfg->accum / cfg->accel_max) : 0.0f;
+    norm_accum = ui_encoder_accel_clampf(norm_accum, 0.0f, 1.0f);
+    float momentum_boost = 1.0f + (0.8f * norm_accum);
+
+    cfg->accum += cfg->gain_k * velocity * momentum_boost;
     cfg->accum = ui_encoder_accel_clampf(cfg->accum, 0.0f, cfg->accel_max);
 
     float scaled = ((float)dir * cfg->base_step * (1.0f + cfg->accum)) + cfg->residual;

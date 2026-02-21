@@ -15,6 +15,7 @@
 #include "rgb_anim_all.h"
 #include "io_log.h"
 #include "io_wifi_ap.h"
+#include "io_rgb_led.h"
 #include "mod_line_sensor_window.h"
 #include "mcp23017_test.h"
 #include "io_i2c_oled.h"
@@ -68,6 +69,8 @@ void app_main(void)
     ui_core_init();
     ui_core_show_page(UI_PAGE_HELLO);
     ui_input_adapter_init();
+
+    io_rgb_led_start();
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));

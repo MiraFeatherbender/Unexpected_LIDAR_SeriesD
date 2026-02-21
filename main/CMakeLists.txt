@@ -18,6 +18,7 @@ idf_component_register(
         "plugins/io_lidar.c"
         "plugins/io_rgb.c"
         "plugins/io_battery.c"
+        "plugins/io_rgb_led.c"
         "plugins/io_wifi_ap.c"
         "plugins/io_fatfs.c"
         "plugins/io_log.c"
@@ -40,6 +41,7 @@ idf_component_register(
         "plugins/battery/battery_json.c"
 
         # Library sources
+        "src/FastNoiseLite_impl.c"
         "src/UMSeriesD_idf.c"
 
         # UI elements

@@ -107,20 +107,21 @@ void ui_setting_derive_accel_default(
     if (!setting || !accel) return;
 
     float delta = setting->max_value - setting->min_value;
+    if (delta < 0.0f) delta = -delta;
+    if (delta < 1.0f) delta = 1.0f;
+    float scale = log10f(delta + 1.0f);
     
     // Base step: constant per type
     accel->base_step = (setting->type == UI_SETTING_TYPE_FLOAT_BAR) ? 0.001f : 1.0f;
     
-    // Gain: inversely proportional to range
-    // Small ranges get aggressive acceleration, large ranges get gentler
-    accel->gain_k = 0.02f / fmaxf(1.0f, delta / 100.0f);
+    // Gain: only mildly decreases with range so large ranges still ramp quickly.
+    accel->gain_k = 0.035f / (1.0f + (0.20f * scale));
     
-    // Tau: constant across all settings (time constant for decay)
-    accel->tau_ms = 250.0f;
+    // Tau: longer memory enables sustained fast rotation to accumulate better.
+    accel->tau_ms = 380.0f;
     
-    // Max accel: scales with range
-    // A 0-100 setting accelerates slower than 0-10000
-    accel->accel_max = 2.0f + (delta / 1000.0f);
+    // Max accel: log-scaled cap to avoid runaway while still allowing larger jumps.
+    accel->accel_max = 6.0f + (3.0f * scale);
 }
 
 static int clamp_index(int idx, int minv, int maxv)
