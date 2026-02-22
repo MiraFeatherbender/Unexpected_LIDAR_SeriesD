@@ -57,20 +57,19 @@ void app_main(void)
     mod_line_sensor_window_init();
     io_lidar_init();
     lidar_coordinator_init();
-    io_wifi_ap_init();
     io_battery_init();
     io_MCP23017_init();
-    // mcp23017_test_start();
 
     rgb_anim_init_all();
     io_rgb_init();
 
     io_i2c_oled_init(NULL);
-    ui_core_init();
-    ui_core_show_page(UI_PAGE_HELLO);
-    ui_input_adapter_init();
-
     io_rgb_led_start();
+    ui_core_init();
+    io_wifi_ap_init();
+    ui_input_adapter_init();
+    ui_core_show_page(UI_PAGE_HELLO);
+
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));

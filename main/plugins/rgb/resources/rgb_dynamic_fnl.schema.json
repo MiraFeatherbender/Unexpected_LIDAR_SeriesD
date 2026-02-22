@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unexpectedmaker.local/schemas/rgb_dynamic_fnl.schema.json",
+  "title": "RGB Dynamic FastNoiseLite Configuration",
+  "type": "object",
+  "required": ["schema_version", "animations"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "animations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/animation"
+      }
+    }
+  },
+  "$defs": {
+    "animation": {
+      "type": "object",
+      "required": ["id", "palette", "anim_mode"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "anim_mode": { "const": "fnl" }
+            },
+            "required": ["anim_mode"]
+          },
+          "then": {
+            "required": ["fnl_state"]
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63
+        },
+        "palette": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 127,
+          "pattern": "^[^\\\\/:*?\"<>|]+\\.png$"
+        },
+        "anim_mode": {
+          "type": "string",
+          "enum": ["static", "fnl"]
+        },
+        "brightness_strategy": {
+          "type": "string",
+          "enum": ["static", "value_noise"]
+        },
+        "fnl_state": {
+          "$ref": "#/$defs/fnl_state"
+        }
+      }
+    },
+    "fnl_state": {
+      "type": "object",
+      "required": [
+        "seed",
+        "frequency",
+        "noise_type",
+        "rotation_type_3d",
+        "fractal_type",
+        "octaves",
+        "lacunarity",
+        "gain",
+        "weighted_strength",
+        "ping_pong_strength",
+        "cellular_distance_func",
+        "cellular_return_type",
+        "cellular_jitter_mod",
+        "domain_warp_type",
+        "domain_warp_amp"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "seed": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "frequency": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1000.0
+        },
+        "noise_type": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "rotation_type_3d": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "fractal_type": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "octaves": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "lacunarity": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 32.0
+        },
+        "gain": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 4.0
+        },
+        "weighted_strength": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 4.0
+        },
+        "ping_pong_strength": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 16.0
+        },
+        "cellular_distance_func": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "cellular_return_type": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "cellular_jitter_mod": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 8.0
+        },
+        "domain_warp_type": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "domain_warp_amp": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 32.0
+        }
+      }
+    }
+  }
+}

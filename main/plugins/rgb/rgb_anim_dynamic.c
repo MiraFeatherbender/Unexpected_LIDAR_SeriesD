@@ -15,10 +15,13 @@
 #include "esp_dsp.h" // for convolution operations
 #include "esp_heap_caps.h"
 #include "noise_data.h"
+#include "rgb_dynamic_fnl_config.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define RGB_ANIM_JSON_PATH "/data/rgb_animations.json"
+#define RGB_ANIM_JSON_ONBOARD_PATH "/data/rgb_animations_onboard.json"
+#define RGB_ANIM_JSON_STRIP_PATH   "/data/rgb_animations_strip.json"
+#define RGB_ANIM_JSON_LEGACY_PATH  "/data/rgb_animations.json"
 #define IMAGE_DIR "/data/images/"
 #define STBI_ONLY_PNG
 
@@ -55,7 +58,10 @@ static rgb_anim_buffers_t anim_buffers = {0};
 
 // Helper function: allocates memory and logs error if allocation fails
 static bool alloc_buffer(void **ptr, size_t size, const char *name) {
-    *ptr = malloc(size);
+    *ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!*ptr) {
+        *ptr = malloc(size);
+    }
     if (!*ptr) {
         ESP_LOGE("rgb_anim_dynamic", "Failed to allocate %s (%u bytes)", name, (unsigned)size);
         return false;
@@ -77,6 +83,8 @@ struct rgb_anim_dynamic_config {
     char brightness_noise_png_path[256];
     noise_walk_spec_t contrast_walk_spec;
     noise_walk_spec_t brightness_walk_spec;
+    rgb_dynamic_anim_mode_t noise_mode;
+    fnl_state fnl;
 };
 
 static noise_walk_state_t s_contrast_walk = {0};
@@ -85,14 +93,16 @@ static uint8_t s_user_brightness = 255;
 
 
 // Static array of loaded configs
-#define MAX_DYNAMIC_ANIMS 12
-static rgb_anim_dynamic_config_t s_configs[MAX_DYNAMIC_ANIMS];
+static rgb_anim_dynamic_config_t s_configs[RGB_DYNAMIC_MAX_ANIMS];
+static rgb_anim_dynamic_config_t s_reload_scratch[RGB_DYNAMIC_MAX_ANIMS];
 static int s_config_count = 0;
+static rgb_anim_dynamic_config_source_t s_config_source = RGB_DYNAMIC_CONFIG_ONBOARD;
 
 // --- FreeRTOS Task & Semaphore ---
 static SemaphoreHandle_t s_load_png_sem = NULL;
 static int s_load_png_idx = -1; // Index to be used by the task
 static TaskHandle_t s_load_png_task_handle = NULL;
+static const uint32_t s_load_png_task_stack = 16384;
 
 // --- Helper: Read image file with prepended IMAGE_DIR ---
 static int read_image_file(const char *file_member, uint8_t **out_buf, size_t *buf_size, int req_channels) {
@@ -106,18 +116,22 @@ static int read_image_file(const char *file_member, uint8_t **out_buf, size_t *b
         return -1;
     }
     int read_bytes = x * y * req_channels; // since we forced req_channels
-    if ((size_t)read_bytes > *buf_size) {
-        uint8_t *new_buf = (uint8_t *)realloc(*out_buf, read_bytes);
+    size_t capacity = *buf_size;
+    if ((size_t)read_bytes > capacity) {
+        uint8_t *new_buf = (uint8_t *)heap_caps_realloc(*out_buf, read_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!new_buf) {
+            new_buf = (uint8_t *)realloc(*out_buf, read_bytes);
+        }
         if (!new_buf) {
             ESP_LOGE("rgb_anim_dynamic", "Failed to grow buffer to %d bytes for %s", read_bytes, fullpath);
             stbi_image_free(data);
             return -1;
         }
         *out_buf = new_buf;
-        *buf_size = read_bytes;
     }
 
     memcpy(*out_buf, data, read_bytes);
+    *buf_size = (size_t)read_bytes;
     stbi_image_free(data);
 
     return read_bytes;
@@ -392,107 +406,13 @@ static void Load_PNG_Task(void *pvParameters) {
         if (xSemaphoreTake(s_load_png_sem, portMAX_DELAY) == pdTRUE) {
             int idx = s_load_png_idx;
             if (idx >= 0 && idx < s_config_count) {
-                // Load source images (noise fields + palette)
-                int bytes = read_image_file(s_configs[idx].contrast_noise_png_path, &anim_buffers.contrast_gray_init, &anim_buffers.contrast_gray_size, 1);
-                int bytes2 = read_image_file(s_configs[idx].brightness_noise_png_path, &anim_buffers.brightness_gray_init, &anim_buffers.brightness_gray_size, 1);
-                int bytes3 = read_image_file(s_configs[idx].color_palette_png_path, &anim_buffers.palette_raw_rgb, &anim_buffers.palette_raw_size, 3);
-
-                // Apply palette to contrast grayscale to produce RGB noise field (and build linear palette)
-                const uint8_t *gray = anim_buffers.contrast_gray_init;
-                rgb_color_t *rgb = anim_buffers.contrast_rgb_colored;
-                const uint8_t *pal = anim_buffers.palette_raw_rgb;
-
-                // If we already have a linear palette buffer free it first
-                if (anim_buffers.palette_linear) {
-                    free(anim_buffers.palette_linear);
-                    anim_buffers.palette_linear = NULL;
+                int bytes = read_image_file(s_configs[idx].color_palette_png_path,
+                                            &anim_buffers.palette_raw_rgb,
+                                            &anim_buffers.palette_raw_size,
+                                            3);
+                if (bytes <= 0) {
+                    ESP_LOGE("rgb_anim_dynamic", "Failed to load palette PNG for config id=%d", s_configs[idx].id);
                 }
-                size_t pal_count = anim_buffers.palette_raw_size / 3;
-                if (pal_count == 0) pal_count = 256; // fallback
-                // allocate linear palette (float RGB values 0..1)
-                anim_buffers.palette_linear = (float *)malloc(pal_count * 3 * sizeof(float));
-                if (!anim_buffers.palette_linear) {
-                    ESP_LOGE("rgb_anim_dynamic", "Failed to allocate linear palette");
-                }
-
-                // populate both the 8-bit colored buffer (for compatibility) and linear palette
-                for (size_t i = 0; i < pal_count; ++i) {
-                    if (pal && (i * 3 + 2) < anim_buffers.palette_raw_size) {
-                        uint8_t pr = pal[i*3 + 0];
-                        uint8_t pg = pal[i*3 + 1];
-                        uint8_t pb = pal[i*3 + 2];
-                        anim_buffers.palette_linear[i*3 + 0] = (pr <= 0) ? 0.0f : ( (pr / 255.0f) <= 0.04045f ? (pr / 255.0f) / 12.92f : powf(((pr / 255.0f) + 0.055f) / 1.055f, 2.4f) );
-                        anim_buffers.palette_linear[i*3 + 1] = (pg <= 0) ? 0.0f : ( (pg / 255.0f) <= 0.04045f ? (pg / 255.0f) / 12.92f : powf(((pg / 255.0f) + 0.055f) / 1.055f, 2.4f) );
-                        anim_buffers.palette_linear[i*3 + 2] = (pb <= 0) ? 0.0f : ( (pb / 255.0f) <= 0.04045f ? (pb / 255.0f) / 12.92f : powf(((pb / 255.0f) + 0.055f) / 1.055f, 2.4f) );
-                    } else {
-                        anim_buffers.palette_linear[i*3 + 0] = 0.0f;
-                        anim_buffers.palette_linear[i*3 + 1] = 0.0f;
-                        anim_buffers.palette_linear[i*3 + 2] = 0.0f;
-                    }
-                }
-
-                // (previously yielded to watchdog; removed to restore original timing)
-
-                // Build intermediate 8-bit colored (preserve original behavior)
-                for (int i = 0; i < 256 * 256; ++i) {
-                    uint16_t idx = *gray++;
-                    idx = idx << 1; // 0-255 -> 0-510 (even indices)
-                    const uint8_t *p = pal + (idx * 3);
-                    rgb->r = p[0];
-                    rgb->g = p[1];
-                    rgb->b = p[2];
-                    ++rgb;
-                }
-
-                // (removed brief sleep)
-
-                // Blur contrast RGB channels in linear float space, scatter back to uint8 staging
-                // For each channel: build float src from palette_linear mapped indices, blur in float, convert back
-                const uint8_t *gray2 = anim_buffers.contrast_gray_init;
-                // process R,G,B
-                for (int ch = 0; ch < 3; ++ch) {
-                    // fill channel_float_src with linear palette values
-                    float *srcf = anim_buffers.channel_float_src;
-                    for (int i = 0; i < 256 * 256; ++i) {
-                        uint16_t idx = gray2[i];
-                        idx = idx << 1;
-                        size_t pal_idx = (size_t)idx % (pal_count);
-                        srcf[i] = anim_buffers.palette_linear[pal_idx * 3 + ch];
-                    }
-                    // blur float channel and scatter converted sRGB back to uint8 staging
-                    blur_channel_float_and_scatter(srcf, (uint8_t *)&anim_buffers.contrast_rgb_staging[0].r + ch, 256, 256, sizeof(rgb_color_t));
-                }
-
-                // Blur brightness field using linear float path (convert grayscale to linear float, blur, convert back)
-                // Copy grayscale (0..255) into float linear (0..1) buffer
-                float *b_srcf = anim_buffers.channel_float_src; // reuse temp buffer
-                for (int i = 0; i < 256 * 256; ++i) {
-                    // normalize to 0..1 and treat as linear luminance
-                    b_srcf[i] = (float)anim_buffers.brightness_gray_init[i] / 255.0f;
-                }
-                // pad and blur into unpadded_blur_buf
-                pad_image_f(b_srcf, anim_buffers.padded_blur_buf, 256, 256);
-                blur_image_simd(anim_buffers.padded_blur_buf, BLUR_KERNEL_WEIGHTS, 256, 256);
-                // scatter back center region into uint8 staging (linear->sRGB8 conversion)
-                int padded_width = 256 + 2;
-                for (int row = 0; row < 256; ++row) {
-                    for (int col = 0; col < 256; ++col) {
-                        int src_idx = (row + 1) * padded_width + (col + 1);
-                        float lin = anim_buffers.unpadded_blur_buf[src_idx];
-                        // linear (0..1) -> sRGB (0..1)
-                        float s;
-                        if (lin <= 0.0f) s = 0.0f;
-                        else if (lin <= 0.0031308f) s = 12.92f * lin;
-                        else s = 1.055f * powf(lin, 1.0f/2.4f) - 0.055f;
-                        int v = (int)fminf(fmaxf(s * 255.0f, 0.0f), 255.0f);
-                        anim_buffers.brightness_gray_staging[row * 256 + col] = (uint8_t)v;
-                    }
-                    	
-                }
-
-                // Promote staging buffers to active
-                swap_ptrs((void**)&anim_buffers.contrast_rgb_active, (void**)&anim_buffers.contrast_rgb_staging);
-                swap_ptrs((void**)&anim_buffers.brightness_gray_active, (void**)&anim_buffers.brightness_gray_staging);
             }
         }
     }
@@ -528,9 +448,237 @@ static noise_walk_spec_t parse_walk_spec(cJSON *obj) {
     return spec;
 }
 
+static rgb_dynamic_anim_mode_t parse_anim_mode(cJSON *anim)
+{
+    cJSON *mode = cJSON_GetObjectItem(anim, "anim_mode");
+    if (!mode) {
+        mode = cJSON_GetObjectItem(anim, "noise_mode");
+    }
+    if (!mode || !cJSON_IsString(mode) || !mode->valuestring) {
+        return RGB_DYNAMIC_ANIM_MODE_DYNAMIC;
+    }
+
+    // Keep legacy JSON string mapping for compatibility.
+    if (strcmp(mode->valuestring, "static") == 0) {
+        return RGB_DYNAMIC_ANIM_MODE_DEDICATED;
+    }
+
+    return RGB_DYNAMIC_ANIM_MODE_DYNAMIC;
+}
+
+static void parse_fnl_state_with_defaults(cJSON *fnl_obj, fnl_state *out);
+
+static const char *config_primary_path(rgb_anim_dynamic_config_source_t source)
+{
+    return (source == RGB_DYNAMIC_CONFIG_STRIP) ? RGB_ANIM_JSON_STRIP_PATH : RGB_ANIM_JSON_ONBOARD_PATH;
+}
+
+static const char *config_fallback1_path(rgb_anim_dynamic_config_source_t source)
+{
+    return (source == RGB_DYNAMIC_CONFIG_STRIP) ? RGB_ANIM_JSON_ONBOARD_PATH : RGB_ANIM_JSON_LEGACY_PATH;
+}
+
+static const char *config_fallback2_path(rgb_anim_dynamic_config_source_t source)
+{
+    return (source == RGB_DYNAMIC_CONFIG_STRIP) ? RGB_ANIM_JSON_LEGACY_PATH : NULL;
+}
+
+static int find_config_index_by_id(const rgb_anim_dynamic_config_t *cfgs, int count, int id)
+{
+    for (int i = 0; i < count; ++i) {
+        if (cfgs[i].id == id) return i;
+    }
+    return -1;
+}
+
+static bool write_text_file(const char *path, const char *text)
+{
+    if (!path || !text) return false;
+
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        ESP_LOGW("rgb_anim_dynamic", "Failed to open %s for write", path);
+        return false;
+    }
+
+    size_t len = strlen(text);
+    size_t written = fwrite(text, 1, len, f);
+    fclose(f);
+    if (written != len) {
+        ESP_LOGW("rgb_anim_dynamic", "Short write for %s (%u/%u)", path, (unsigned)written, (unsigned)len);
+        return false;
+    }
+
+    return true;
+}
+
+static bool is_mode_string_valid(const cJSON *mode)
+{
+    return mode && cJSON_IsString(mode) && mode->valuestring &&
+           ((strcmp(mode->valuestring, "static") == 0) || (strcmp(mode->valuestring, "fnl") == 0));
+}
+
+static bool load_configs_from_file(const char *path, rgb_anim_dynamic_config_t *out_cfgs, int *out_count)
+{
+    if (!path || !out_cfgs || !out_count || !buffer) return false;
+    bool rewrite_legacy_key = (strcmp(path, RGB_ANIM_JSON_LEGACY_PATH) != 0);
+    bool rewrite_performed = false;
+
+    int read_bytes = io_fatfs_read_file(path, buffer, buffer_len - 1);
+    if (read_bytes <= 0) {
+        return false;
+    }
+    buffer[read_bytes] = '\0';
+
+    cJSON *root = cJSON_Parse((char *)buffer);
+    if (!root) {
+        return false;
+    }
+
+    cJSON *animations = cJSON_GetObjectItem(root, "animations");
+    if (!animations || !cJSON_IsArray(animations)) {
+        cJSON_Delete(root);
+        return false;
+    }
+
+    int count = cJSON_GetArraySize(animations);
+    if (count > RGB_DYNAMIC_MAX_ANIMS) count = RGB_DYNAMIC_MAX_ANIMS;
+
+    for (int i = 0; i < count; i++) {
+        cJSON *anim = cJSON_GetArrayItem(animations, i);
+        cJSON *anim_mode_obj = cJSON_GetObjectItem(anim, "anim_mode");
+        cJSON *noise_mode_obj = cJSON_GetObjectItem(anim, "noise_mode");
+        cJSON *fnl_state_obj = cJSON_GetObjectItem(anim, "fnl_state");
+
+        if (rewrite_legacy_key && !anim_mode_obj && is_mode_string_valid(noise_mode_obj)) {
+            cJSON_AddStringToObject(anim, "anim_mode", noise_mode_obj->valuestring);
+            cJSON_DeleteItemFromObject(anim, "noise_mode");
+            anim_mode_obj = cJSON_GetObjectItem(anim, "anim_mode");
+            noise_mode_obj = NULL;
+            rewrite_performed = true;
+        }
+
+        out_cfgs[i].id = GET_INT(anim, "id", 0);
+        GET_STR(anim, "palette", out_cfgs[i].color_palette_png_path);
+        GET_STR(anim, "contrast_noise_field", out_cfgs[i].contrast_noise_png_path);
+        GET_STR(anim, "brightness_noise_field", out_cfgs[i].brightness_noise_png_path);
+        out_cfgs[i].contrast_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "contrast_walk_spec"));
+        out_cfgs[i].brightness_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "brightness_walk_spec"));
+        out_cfgs[i].noise_mode = parse_anim_mode(anim);
+        parse_fnl_state_with_defaults(fnl_state_obj, &out_cfgs[i].fnl);
+
+        bool default_noise_mode = !(is_mode_string_valid(anim_mode_obj) || is_mode_string_valid(noise_mode_obj));
+        bool default_fnl_state = !(fnl_state_obj && cJSON_IsObject(fnl_state_obj));
+        if (default_noise_mode || default_fnl_state) {
+            ESP_LOGI("rgb_anim_dynamic",
+                     "Anim id=%d defaults applied (%s%s)",
+                     out_cfgs[i].id,
+                     default_noise_mode ? "anim_mode " : "",
+                     default_fnl_state ? "fnl_state" : "");
+        }
+    }
+
+    if (rewrite_performed) {
+        char *json_str = cJSON_PrintUnformatted(root);
+        if (json_str) {
+            if (write_text_file(path, json_str)) {
+                ESP_LOGI("rgb_anim_dynamic", "Migrated %s: noise_mode -> anim_mode", path);
+            }
+            cJSON_free(json_str);
+        }
+    }
+
+    cJSON_Delete(root);
+    *out_count = count;
+    return true;
+}
+
+static void merge_missing_by_id(rgb_anim_dynamic_config_t *dst, int *dst_count,
+                                const rgb_anim_dynamic_config_t *src, int src_count)
+{
+    if (!dst || !dst_count || !src) return;
+    for (int i = 0; i < src_count; ++i) {
+        if (*dst_count >= RGB_DYNAMIC_MAX_ANIMS) return;
+        if (find_config_index_by_id(dst, *dst_count, src[i].id) >= 0) continue;
+        dst[*dst_count] = src[i];
+        (*dst_count)++;
+    }
+}
+
+static void parse_fnl_state_with_defaults(cJSON *fnl_obj, fnl_state *out)
+{
+    if (!out) return;
+
+    *out = fnlCreateState();
+    if (!fnl_obj || !cJSON_IsObject(fnl_obj)) {
+        return;
+    }
+
+    #define FNL_SET_INT(field) do { \
+        cJSON *it = cJSON_GetObjectItem(fnl_obj, #field); \
+        if (it && cJSON_IsNumber(it)) out->field = it->valueint; \
+    } while (0)
+
+    #define FNL_SET_FLOAT(field) do { \
+        cJSON *it = cJSON_GetObjectItem(fnl_obj, #field); \
+        if (it && cJSON_IsNumber(it)) out->field = (float)it->valuedouble; \
+    } while (0)
+
+    FNL_SET_INT(seed);
+    FNL_SET_FLOAT(frequency);
+    FNL_SET_INT(noise_type);
+    FNL_SET_INT(rotation_type_3d);
+    FNL_SET_INT(fractal_type);
+    FNL_SET_INT(octaves);
+    FNL_SET_FLOAT(lacunarity);
+    FNL_SET_FLOAT(gain);
+    FNL_SET_FLOAT(weighted_strength);
+    FNL_SET_FLOAT(ping_pong_strength);
+    FNL_SET_INT(cellular_distance_func);
+    FNL_SET_INT(cellular_return_type);
+    FNL_SET_FLOAT(cellular_jitter_mod);
+    FNL_SET_INT(domain_warp_type);
+    FNL_SET_FLOAT(domain_warp_amp);
+
+    #undef FNL_SET_FLOAT
+    #undef FNL_SET_INT
+}
+
 static inline uint8_t rgb_value(rgb_color_t c) {
     uint8_t max = c.r > c.g ? c.r : c.g;
     return max > c.b ? max : c.b;
+}
+
+static inline float map_noise_to_unit(float n)
+{
+    float t = (n + 1.0f) * 0.5f;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return t;
+}
+
+static rgb_color_t sample_palette_color(float t)
+{
+    rgb_color_t out = {0, 0, 0};
+    if (!anim_buffers.palette_raw_rgb || anim_buffers.palette_raw_size < 3) {
+        return out;
+    }
+
+    size_t pal_count = anim_buffers.palette_raw_size / 3;
+    if (pal_count == 0) {
+        return out;
+    }
+
+    size_t idx = (size_t)(t * (float)(pal_count - 1));
+    if (idx >= pal_count) {
+        idx = pal_count - 1;
+    }
+
+    const uint8_t *p = &anim_buffers.palette_raw_rgb[idx * 3];
+    out.r = p[0];
+    out.g = p[1];
+    out.b = p[2];
+    return out;
 }
 
 static uint8_t brightness_value_noise_rgb(rgb_color_t c, uint8_t noise, uint8_t user_brightness) {
@@ -541,41 +689,15 @@ static uint8_t brightness_value_noise_rgb(rgb_color_t c, uint8_t noise, uint8_t 
 }
 
 void alloc_png_bufs(void) {
-    // Allocate all necessary buffers for dynamic animation
     bool ok = true;
-    anim_buffers.contrast_gray_size = 256*256;
-    anim_buffers.brightness_gray_size = 256*256;
-    anim_buffers.palette_raw_size = 256*3;
-    ok &= alloc_buffer((void**)&anim_buffers.contrast_rgb_active,   sizeof(rgb_color_t)*256*256, "contrast_rgb_active");
-    ok &= alloc_buffer((void**)&anim_buffers.contrast_rgb_staging,  sizeof(rgb_color_t)*256*256, "contrast_rgb_staging");
-    ok &= alloc_buffer((void**)&anim_buffers.contrast_rgb_colored,  sizeof(rgb_color_t)*256*256, "contrast_rgb_colored");
-    ok &= alloc_buffer((void**)&anim_buffers.contrast_gray_init,    anim_buffers.contrast_gray_size,                  "contrast_gray_init");
-    ok &= alloc_buffer((void**)&anim_buffers.brightness_gray_active,256*256,                  "brightness_gray_active");
-    ok &= alloc_buffer((void**)&anim_buffers.brightness_gray_staging,256*256,                 "brightness_gray_staging");
-    ok &= alloc_buffer((void**)&anim_buffers.brightness_gray_init,  anim_buffers.brightness_gray_size,                  "brightness_gray_init");
-    ok &= alloc_buffer((void**)&anim_buffers.palette_raw_rgb,       anim_buffers.palette_raw_size,                    "palette_raw_rgb");
+    // Keep headroom so common palette sizes (e.g., 1x512 RGB = 1536B) avoid realloc.
+    anim_buffers.palette_raw_size = 2048;
+    ok &= alloc_buffer((void**)&anim_buffers.palette_raw_rgb, anim_buffers.palette_raw_size, "palette_raw_rgb");
 
-    anim_buffers.padded_blur_buf = (float *)memalign(16, (256+2)*(256+2) * sizeof(float));
-    anim_buffers.unpadded_blur_buf = (float *)memalign(16, (256+2)*(256+2) * sizeof(float));
-    anim_buffers.channel_float_src = (float *)memalign(16, 256 * 256 * sizeof(float));
-
-    if (!ok || !anim_buffers.padded_blur_buf || !anim_buffers.unpadded_blur_buf) {
-        free(anim_buffers.contrast_rgb_active);
-        free(anim_buffers.contrast_rgb_staging);
-        free(anim_buffers.contrast_rgb_colored);
-        free(anim_buffers.contrast_gray_init);
-        free(anim_buffers.brightness_gray_active);
-        free(anim_buffers.brightness_gray_staging);
-        free(anim_buffers.brightness_gray_init);
+    if (!ok) {
         free(anim_buffers.palette_raw_rgb);
-        free(anim_buffers.padded_blur_buf);
-        free(anim_buffers.unpadded_blur_buf);
-        free(anim_buffers.channel_float_src);
-        
-        // Reset pointers to NULL for safety
         memset(&anim_buffers, 0, sizeof(anim_buffers));
-
-        ESP_LOGE("rgb_anim_dynamic", "Failed to allocate all PNG buffers");
+        ESP_LOGE("rgb_anim_dynamic", "Failed to allocate palette buffer");
     }
 }
 
@@ -604,7 +726,7 @@ void rgb_anim_dynamic_init(void) {
         s_load_png_sem = xSemaphoreCreateBinary();
     }
     if (s_load_png_task_handle == NULL) {
-        xTaskCreate(Load_PNG_Task, "Load_PNG_Task", 16384, NULL, 5, &s_load_png_task_handle);
+        xTaskCreate(Load_PNG_Task, "Load_PNG_Task", s_load_png_task_stack, NULL, 5, &s_load_png_task_handle);
     }
 }
 
@@ -613,34 +735,45 @@ bool rgb_anim_dynamic_reload(void) {
         ESP_LOGE("rgb_anim_dynamic", "JSON buffer not allocated");
         return false;
     }
-    int read_bytes = io_fatfs_read_file(RGB_ANIM_JSON_PATH, buffer, buffer_len - 1);
-    if (read_bytes <= 0) {
-        // Failed to read JSON file
+    int temp_count = 0;
+
+    const char *primary_path = config_primary_path(s_config_source);
+    const char *fallback1_path = config_fallback1_path(s_config_source);
+    const char *fallback2_path = config_fallback2_path(s_config_source);
+
+    s_config_count = 0;
+    bool have_primary = load_configs_from_file(primary_path, s_configs, &s_config_count);
+    bool have_fallback1 = fallback1_path ? load_configs_from_file(fallback1_path, s_reload_scratch, &temp_count) : false;
+    if (have_fallback1) {
+        merge_missing_by_id(s_configs, &s_config_count, s_reload_scratch, temp_count);
+    }
+
+    bool have_fallback2 = false;
+    if (fallback2_path) {
+        temp_count = 0;
+        have_fallback2 = load_configs_from_file(fallback2_path, s_reload_scratch, &temp_count);
+        if (have_fallback2) {
+            merge_missing_by_id(s_configs, &s_config_count, s_reload_scratch, temp_count);
+        }
+    }
+
+    if (!have_primary && !have_fallback1 && !have_fallback2) {
+        ESP_LOGW("rgb_anim_dynamic", "No dynamic RGB config found in chain for source=%d", (int)s_config_source);
+        s_config_count = 0;
         return false;
     }
-    buffer[read_bytes] = '\0'; // Null-terminate for cJSON
 
-    cJSON *root = cJSON_Parse((char *)buffer);
-    if (!root) {
-        // JSON parsing error
-        return false;
-    }
+    return s_config_count > 0;
+}
 
-    cJSON *animations = cJSON_GetObjectItem(root, "animations");
-    int count = cJSON_GetArraySize(animations);
-    s_config_count = count > MAX_DYNAMIC_ANIMS ? MAX_DYNAMIC_ANIMS : count;
-    for (int i = 0; i < s_config_count; i++) {
-        cJSON *anim = cJSON_GetArrayItem(animations, i);
-        s_configs[i].id = GET_INT(anim, "id", 0);
-        GET_STR(anim, "palette", s_configs[i].color_palette_png_path);
-        GET_STR(anim, "contrast_noise_field", s_configs[i].contrast_noise_png_path);
-        GET_STR(anim, "brightness_noise_field", s_configs[i].brightness_noise_png_path);
-        s_configs[i].contrast_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "contrast_walk_spec"));
-        s_configs[i].brightness_walk_spec = parse_walk_spec(cJSON_GetObjectItem(anim, "brightness_walk_spec"));
-    }
+void rgb_anim_dynamic_set_config_source(rgb_anim_dynamic_config_source_t source)
+{
+    s_config_source = source;
+}
 
-    cJSON_Delete(root);
-    return true;
+rgb_anim_dynamic_config_source_t rgb_anim_dynamic_get_config_source(void)
+{
+    return s_config_source;
 }
 
 int rgb_anim_dynamic_count(void) {
@@ -649,6 +782,11 @@ int rgb_anim_dynamic_count(void) {
 
 // --- Plugin interface implementations ---
 static void dynamic_begin(int idx) {
+    if (s_config_count <= 0) {
+        s_active_idx = 0;
+        return;
+    }
+
     // Set the active config index for this plugin instance
     s_active_idx = idx;
     for(int i = 0; i < s_config_count; i++) {
@@ -656,6 +794,10 @@ static void dynamic_begin(int idx) {
             s_active_idx = i;
             break;
         }
+    }
+
+    if (s_active_idx < 0 || s_active_idx >= s_config_count) {
+        s_active_idx = 0;
     }
 
     // Load walk specs from config and reset walk positions
@@ -676,18 +818,26 @@ static void dynamic_begin(int idx) {
 }
 
 static void dynamic_step(rgb_color_t *out_rgb) {
-    if (!anim_buffers.contrast_rgb_active || !anim_buffers.brightness_gray_active) {
+    if (s_config_count <= 0 || s_active_idx < 0 || s_active_idx >= s_config_count) {
         out_rgb->r = 0;
         out_rgb->g = 0;
         out_rgb->b = 0;
         return;
     }
 
-    uint32_t contrast_idx = ((uint32_t)s_contrast_walk.y << 8) | s_contrast_walk.x;
-    uint32_t brightness_idx = ((uint32_t)s_brightness_walk.y << 8) | s_brightness_walk.x;
-    rgb_color_t contrast = anim_buffers.contrast_rgb_active[contrast_idx];
-    uint8_t noise = anim_buffers.brightness_gray_active[brightness_idx];
-    // uint8_t brightness = 128;
+    rgb_anim_dynamic_config_t *cfg = &s_configs[s_active_idx];
+    if (!anim_buffers.palette_raw_rgb || anim_buffers.palette_raw_size < 3) {
+        out_rgb->r = 0;
+        out_rgb->g = 0;
+        out_rgb->b = 0;
+        return;
+    }
+
+    float n_color = fnlGetNoise2D(&cfg->fnl, (float)s_contrast_walk.x, (float)s_contrast_walk.y);
+    float n_brightness = fnlGetNoise2D(&cfg->fnl, (float)s_brightness_walk.x + 53.0f, (float)s_brightness_walk.y - 91.0f);
+
+    rgb_color_t contrast = sample_palette_color(map_noise_to_unit(n_color));
+    uint8_t noise = (uint8_t)(map_noise_to_unit(n_brightness) * 255.0f);
     uint8_t brightness = brightness_value_noise_rgb(contrast, noise, s_user_brightness);
 
     io_rgb_set_anim_brightness(brightness);
