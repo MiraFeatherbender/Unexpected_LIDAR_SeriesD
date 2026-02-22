@@ -20,6 +20,7 @@ static const ui_setting_collection_t *s_pending_collection = NULL;
 static void on_encoder_input(int8_t dir);
 static int clamp_index(int idx, int minv, int maxv);
 static void create_setting_tile_widget(ui_page_settings_ctx_t *ctx, int idx);
+static void unload_setting_tile_widget(ui_page_settings_ctx_t *ctx, int idx);
 
 static const char *get_enum_option_text(const ui_setting_descriptor_t *setting, int idx)
 {
@@ -236,6 +237,24 @@ static void create_setting_tile_widget(ui_page_settings_ctx_t *ctx, int idx)
     }
 }
 
+static void unload_setting_tile_widget(ui_page_settings_ctx_t *ctx, int idx)
+{
+    if (!ctx || !ctx->collection || !ctx->setting_tiles || !ctx->setting_tile_loaded) return;
+    if (idx < 0 || idx >= ctx->collection->settings_count) return;
+    if (!ctx->setting_tile_loaded[idx]) return;
+
+    lv_obj_t *tile = ctx->setting_tiles[idx];
+    if (!tile) return;
+
+    ui_setting_item_destroy(&ctx->setting_items[idx]);
+    lv_obj_clean(tile);
+
+    ctx->enum_name_labels[idx] = NULL;
+    ctx->enum_value_labels[idx] = NULL;
+    memset(&ctx->setting_items[idx], 0, sizeof(ctx->setting_items[idx]));
+    ctx->setting_tile_loaded[idx] = false;
+}
+
 static void set_active_setting(ui_page_settings_ctx_t *ctx, int idx)
 {
     if (!ctx || !ctx->collection || !ctx->tileview) return;
@@ -245,6 +264,14 @@ static void set_active_setting(ui_page_settings_ctx_t *ctx, int idx)
 
     idx = clamp_index(idx, 0, ctx->collection->settings_count - 1);
     ensure_setting_tile_loaded(ctx, idx);
+    ensure_setting_tile_loaded(ctx, idx - 1);
+    ensure_setting_tile_loaded(ctx, idx + 1);
+
+    for (int i = 0; i < ctx->collection->settings_count; ++i) {
+        if (i >= idx - 1 && i <= idx + 1) continue;
+        unload_setting_tile_widget(ctx, i);
+    }
+
     ctx->active_setting_idx = idx;
     ctx->enum_editing = false;
 
