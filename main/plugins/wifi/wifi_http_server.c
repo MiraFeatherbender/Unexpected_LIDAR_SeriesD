@@ -369,7 +369,7 @@ static esp_err_t rgb_handler(httpd_req_t *req) {
             data[4] = (uint8_t)j_b->valueint;
             cJSON_Delete(json);
 
-            esp_err_t err = dispatch_from_rest(req, (void*)(intptr_t)TARGET_RGB, data, sizeof(data));
+            esp_err_t err = dispatch_from_rest(req, (void*)(intptr_t)TARGET_RGB_ONBOARD, data, sizeof(data));
             if (err != ESP_OK) {
                 send_http_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Dispatch failed");
                 return ESP_FAIL;

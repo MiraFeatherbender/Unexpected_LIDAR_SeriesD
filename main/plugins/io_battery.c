@@ -210,7 +210,7 @@ static void battery_step_frame(void)
 
     dispatch_target_t rgb_targets[TARGET_MAX];
     dispatcher_fill_targets(rgb_targets);
-    rgb_targets[0] = TARGET_RGB;
+    rgb_targets[0] = TARGET_RGB_ONBOARD;
     dispatcher_pool_send_params_t params = {
         .type = DISPATCHER_POOL_STREAMING,
         .source = SOURCE_BATTERY,

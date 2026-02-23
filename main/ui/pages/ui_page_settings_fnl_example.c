@@ -193,7 +193,7 @@ static esp_err_t fnl_send_ctx_sync(rgb_led_fnl_ctx_t *ctx, TickType_t timeout)
 
     dispatch_target_t targets[TARGET_MAX];
     dispatcher_fill_targets(targets);
-    targets[0] = TARGET_RGB_LED;
+    targets[0] = TARGET_RGB_STRIP;
 
     dispatcher_pool_send_params_t params = {
         .type = DISPATCHER_POOL_STREAMING,

@@ -37,7 +37,7 @@ static void io_rgb_led_step_frame(void);
 
 static dispatcher_module_t io_rgb_led_mod = {
     .name = "io_rgb_led",
-    .target = TARGET_RGB_LED,
+    .target = TARGET_RGB_STRIP,
     .queue_len = LED_STRIP_CMD_QUEUE_LEN,
     .stack_size = LED_STRIP_TASK_STACK_WORDS,
     .task_prio = LED_STRIP_TASK_PRIORITY,

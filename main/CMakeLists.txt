@@ -1,5 +1,15 @@
-# Automatically collect all animation source files
-file(GLOB RGB_ANIMATION_SOURCES "plugins/rgb/*.c")
+# Explicit RGB sources (frozen list; add new rgb files manually)
+set(RGB_ANIMATION_SOURCES
+    "plugins/rgb/noise_data.c"
+    "plugins/rgb/rgb_anim_all.c"
+    "plugins/rgb/rgb_anim_breathe.c"
+    "plugins/rgb/rgb_anim_dynamic.c"
+    "plugins/rgb/rgb_anim_heartbeat.c"
+    "plugins/rgb/rgb_anim_off.c"
+    "plugins/rgb/rgb_anim_solid.c"
+    "plugins/rgb/rgb_core.c"
+    "plugins/rgb/rgb_state_json.c"
+)
 file(GLOB LIDAR_SOURCES "plugins/RPLIDAR/*.c")
 #file(GLOB WIFI_SOURCES "plugins/wifi/*.c")
 
@@ -16,9 +26,9 @@ idf_component_register(
         "plugins/io_gpio.c"
         "plugins/io_usb_msc.c"
         "plugins/io_lidar.c"
-        "plugins/io_rgb.c"
+        "plugins/io_rgb_onboard.c"
         "plugins/io_battery.c"
-        "plugins/io_rgb_led.c"
+        "plugins/io_rgb_strip.c"
         "plugins/io_wifi_ap.c"
         "plugins/io_fatfs.c"
         "plugins/io_log.c"
@@ -27,7 +37,7 @@ idf_component_register(
         "plugins/mcp23017_test.c"
         "plugins/io_i2c_oled.c"
         
-        # Animation sources (auto-discovered)
+        # RGB sources (explicit list)
         ${RGB_ANIMATION_SOURCES}
 
         # LIDAR sources (auto-discovered)

@@ -10,6 +10,7 @@
 #include "io_lidar.h"
 #include "lidar_coordinator.h"
 #include "io_rgb.h"
+#include "rgb_core.h"
 #include "io_battery.h"
 #include "rgb_anim.h"
 #include "rgb_anim_all.h"
@@ -63,14 +64,15 @@ void app_main(void)
     // mcp23017_test_start();
 
     rgb_anim_init_all();
+    rgb_core_init();
     io_rgb_init();
+    io_rgb_led_start();
 
     io_i2c_oled_init(NULL);
     ui_core_init();
     ui_core_show_page(UI_PAGE_HELLO);
     ui_input_adapter_init();
 
-    io_rgb_led_start();
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
