@@ -74,7 +74,7 @@ static void heartbeat_set_brightness(uint8_t b)
 
 static bool heartbeat_sample_hsv(const rgb_core_sample_in_t *in, hsv_color_t *out_hsv)
 {
-    if (!in || !out_hsv || in->mode != RGB_CORE_IN_HSV_PHASE) {
+    if (!in || !out_hsv) {
         return false;
     }
 

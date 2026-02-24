@@ -291,7 +291,7 @@ bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb)
     const rgb_anim_ex_t *rgb_ex = s_rgb_plugins_ex[plugin_id];
 
     if (anim->type == RGB_PLUGIN_TYPE_HSV && anim->plugin.hsv) {
-        if (in->mode == RGB_CORE_IN_HSV_PHASE && hsv_ex && hsv_ex->sample_hsv) {
+        if (hsv_ex && hsv_ex->sample_hsv) {
             hsv_color_t out_hsv = s_current_hsv;
             if (hsv_ex->sample_hsv(in, &out_hsv)) {
                 hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &out_rgb->r, &out_rgb->g, &out_rgb->b);
@@ -312,7 +312,7 @@ bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb)
     }
 
     if (anim->type == RGB_PLUGIN_TYPE_RGB && anim->plugin.rgb) {
-        if (in->mode == RGB_CORE_IN_NOISE_U8 && rgb_ex && rgb_ex->sample_rgb) {
+        if (rgb_ex && rgb_ex->sample_rgb) {
             if (rgb_ex->sample_rgb(in, out_rgb)) {
                 return true;
             }

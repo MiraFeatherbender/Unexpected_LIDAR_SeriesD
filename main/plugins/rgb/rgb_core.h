@@ -6,13 +6,7 @@
 
 #include "rgb_anim.h"
 
-typedef enum {
-    RGB_CORE_IN_HSV_PHASE = 0,
-    RGB_CORE_IN_NOISE_U8  = 1,
-} rgb_core_input_mode_t;
-
 typedef struct {
-    rgb_core_input_mode_t mode;
     uint8_t plugin_id;
     uint8_t brightness;
     union {

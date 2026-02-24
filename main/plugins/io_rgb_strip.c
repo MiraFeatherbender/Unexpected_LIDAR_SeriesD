@@ -29,9 +29,9 @@ static const char *TAG = "io_rgb_led";
 static led_strip_handle_t s_led_strip = NULL;
 
 // Temporary test vector: heartbeat plugin with existing baseline HSVB values
-static const rgb_plugin_id_t s_strip_test_plugin = RGB_PLUGIN_OFF;
+static const rgb_plugin_id_t s_strip_test_plugin = RGB_PLUGIN_HEARTBEAT;
 static const hsv_color_t s_strip_test_hsv = { .h = 88, .s = 255, .v = 220 };
-static const uint8_t s_strip_test_brightness = 255;
+static const uint8_t s_strip_test_brightness = 128;
 static uint8_t s_strip_phase_u8 = 0;
 
 static fnl_state s_noise_active;
@@ -123,7 +123,6 @@ static void io_rgb_led_process_msg(const dispatcher_msg_t *msg)
 static void io_rgb_led_step_frame(void)
 {
     rgb_core_sample_in_t in = {
-        .mode = RGB_CORE_IN_HSV_PHASE,
         .plugin_id = s_strip_test_plugin,
         .brightness = s_strip_test_brightness,
         .in.hsv_phase = {
