@@ -1,4 +1,4 @@
-# RGB Core Extended Interface (Draft v2)
+# RGB Core Extended Interface (Draft v3)
 
 Purpose: introduce phase-aware and noise-aware plugin sampling while preserving legacy plugin APIs and behavior.
 
@@ -14,7 +14,7 @@ This draft defines exact structs and function signatures for incremental migrati
 
 ---
 
-## Proposed public types (new)
+## Implemented core sample types (current)
 
 ```c
 // rgb_core_ex.h
@@ -24,20 +24,14 @@ This draft defines exact structs and function signatures for incremental migrati
 #include <stdint.h>
 #include "rgb_anim.h"
 
-// Input mode determines which union arm is valid.
-typedef enum {
-    RGB_CORE_IN_HSV_PHASE = 0,   // base HSV + explicit phase_u8
-    RGB_CORE_IN_NOISE_U8  = 1,   // direct noise sample for palette/noise mapping
-} rgb_core_input_mode_t;
-
 // Explicit caller-provided sampling input.
 typedef struct {
-    rgb_core_input_mode_t mode;
+    uint8_t plugin_id;         // requested plugin for this output/sample
     uint8_t brightness;        // explicit brightness for this sample (0..255)
     union {
         struct {
             hsv_color_t base_hsv;
-            uint8_t phase_u8;  // explicit phase/frame index in [0,255]
+            uint8_t *phase_u8; // caller-owned phase pointer (plugin mutates progression)
         } hsv_phase;
         uint8_t noise_u8;      // direct noise sample 0..255
     } in;
@@ -46,7 +40,7 @@ typedef struct {
 
 ---
 
-## Proposed extended plugin callbacks (optional)
+## Extended plugin callbacks (optional, implemented shape)
 
 ```c
 // Optional extension for HSV plugins.
@@ -57,9 +51,8 @@ typedef struct {
     void (*set_brightness)(uint8_t b);
 
     // New: phase-aware HSV sample path.
-    // Input mode must be RGB_CORE_IN_HSV_PHASE.
-    // Output is RGB for output uniformity.
-    bool (*sample_hsv_rgb)(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb);
+    // Core performs HSV->RGB conversion centrally.
+    bool (*sample_hsv)(const rgb_core_sample_in_t *in, hsv_color_t *out_hsv);
 } hsv_anim_ex_t;
 
 // Optional extension for RGB/noise plugins.
@@ -69,7 +62,6 @@ typedef struct {
     void (*set_brightness)(uint8_t b);
 
     // New: noise-aware RGB sample path.
-    // Input mode must be RGB_CORE_IN_NOISE_U8.
     // Output: mapped RGB color.
     bool (*sample_rgb)(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb);
 } rgb_anim_ex_t;
@@ -91,10 +83,10 @@ void io_rgb_register_rgb_plugin_ex(rgb_plugin_id_t id, const rgb_anim_ex_t *plug
 
 ---
 
-## Core sample API (new)
+## Core sample API
 
 ```c
-// Core decides active plugin route based on active plugin + input mode.
+// Core decides route by requested plugin_id and registered plugin type.
 // Output is always RGB.
 bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb);
 ```
@@ -102,13 +94,13 @@ bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb);
 Canonical call examples:
 
 ```c
-// Example A: HSV + explicit phase sampling
+// Example A: HSV plugin sampling with caller-owned phase
 rgb_core_sample_in_t in_hsv = {
-    .mode = RGB_CORE_IN_HSV_PHASE,
+    .plugin_id = RGB_PLUGIN_BREATHE,
     .brightness = 200,
     .in.hsv_phase = {
         .base_hsv = (hsv_color_t){ .h = 10, .s = 255, .v = 180 },
-        .phase_u8 = 64,
+        .phase_u8 = &phase_u8,
     },
 };
 
@@ -119,7 +111,7 @@ bool ok = rgb_core_sample(&in_hsv, &out_rgb);
 ```c
 // Example B: direct noise sample -> palette/noise RGB mapping
 rgb_core_sample_in_t in_noise = {
-    .mode = RGB_CORE_IN_NOISE_U8,
+    .plugin_id = RGB_PLUGIN_FIRE,
     .brightness = 180,
     .in.noise_u8 = 173,
 };
@@ -140,38 +132,72 @@ Implementation note: `rgb_core_step_rgb()` can internally call `rgb_core_sample(
 ---
 
 ## Routing + fallback rules (in core)
-1. If active plugin has EX registration:
-    - EX-HSV plugin: call `sample_hsv_rgb(...)` when mode is `RGB_CORE_IN_HSV_PHASE`.
-    - EX-RGB plugin: call `sample_rgb(...)` when mode is `RGB_CORE_IN_NOISE_U8`.
-    - In EX path, `in->brightness` is an input parameter; plugin-defined behavior determines how/if it affects output.
-2. Else fallback to legacy registration:
+1. Core uses registry type for `in->plugin_id` to choose path:
+    - HSV-registered plugin -> EX `sample_hsv(...)` (if present), then core converts HSV->RGB.
+    - RGB-registered plugin -> EX `sample_rgb(...)` (if present).
+2. In EX path, `in->brightness` is an input parameter; plugin-defined behavior determines how/if it affects output.
+3. Else fallback to legacy registration:
    - legacy HSV plugin path (`step(hsv*)`) -> convert HSV to RGB as needed.
    - legacy RGB plugin path (`step(rgb*)`).
-3. If plugin callback fails/returns false, fallback to legacy path if present; otherwise return false.
-4. If input mode doesn't match plugin capability, either fallback to legacy path or return false by policy.
+4. If plugin callback fails/returns false, fallback to legacy path if present; otherwise return false.
 5. On plugin-change/reset events, core may call `begin_phase(&phase_u8)` to preserve existing begin semantics while externalizing phase storage.
 
 ---
 
-## Phase semantics (draft)
-- `in.hsv_phase.phase_u8` is caller-owned explicit sampling phase/frame index.
+## Phase semantics (current)
+- `in.hsv_phase.phase_u8` is caller-owned phase pointer.
 - Domain is `0..255` to match existing animation framing (heartbeat LUT + breathe 256-frame model).
 - Natural progression wraps modulo 256 (e.g., `phase_u8 = (phase_u8 + step) & 0xFF`).
-- Core should not mutate caller-provided phase.
+- Plugins mutate caller-owned phase progression; callers own storage/lifetime.
 - Plugins that do not use phase simply ignore it.
 - EX begin behavior should reset referenced phase (typically to `0`) instead of relying on plugin-static phase globals.
 
 ---
 
-## Migration plan (plugin-by-plugin)
-1. Migrate plugin begin signatures first to phase-pointer form (`begin_phase(uint8_t *phase_u8)` behavior) and update the onboard caller path to own/pass phase explicitly.
-2. Add EX scaffolding in core (`*_ex` registrations + `rgb_core_sample()`), with strict fallback to existing legacy paths.
-3. Keep onboard path on compatibility helper (`rgb_core_step_rgb()`) for non-migrated plugins so existing runtime behavior remains unchanged while EX work lands.
-4. Convert one low-risk HSV plugin first to EX (`sample_hsv_rgb` + `begin_phase`) while retaining legacy callback registration during transition.
-5. Migrate strip sampling path to `rgb_core_sample()` and pass explicit caller-owned inputs (`brightness`, and either `phase_u8` or `noise_u8` by mode).
-6. Convert dynamic/palette-noise plugin to EX `sample_rgb` after walk/noise backend alignment, keeping legacy registration active during transition.
-7. Convert remaining plugins incrementally, preserving plugin-defined brightness behavior and phase-ignore behavior where applicable.
-8. Remove legacy callback reliance only after all active plugins are EX-capable and parity-verified across onboard + strip outputs.
+## Migration status (as of 2026-02-24)
+- [x] Begin signatures migrated to phase-pointer semantics and onboard owns/passes phase storage.
+- [x] Core EX scaffolding added (`*_ex` registrations + `rgb_core_sample()`), with strict fallback.
+- [x] Onboard kept on compatibility path (`rgb_core_step_rgb()`) for current behavior stability.
+- [x] HSV plugins extended to EX while retaining legacy registrations (`OFF`, `SOLID`, `HEARTBEAT`, `BREATHE`).
+- [x] Strip migrated to `rgb_core_sample()` and validated on hardware.
+- [x] Caller-side mode selection removed; core now auto-routes by registered plugin type for requested plugin id.
+- [x] Dynamic EX scaffold added non-breakingly; palette mapping helpers now support plugin-aware lookup and future float-noise rescale.
+
+## Remaining migration items
+1. Move dynamic from compatibility EX scaffold to full per-output instance-ready behavior (independent onboard/strip state ownership).
+2. Finalize walk/noise contract for RGB plugins:
+    - near-term: dynamic as palette retriever/mapper and random-walk return route;
+    - later: normalize walk/noise interfaces per-output without breaking parity.
+3. Transition onboard from legacy step path to sample path once RGB dynamic parity is verified.
+4. Remove legacy callback reliance only after parity across onboard + strip is confirmed for all active plugins.
+
+### Dynamic instancing plan (next)
+Goal: allow onboard and strip to request dynamic RGB plugins independently without shared mutable runtime state.
+
+1. Introduce dynamic instance state structs (caller-owned handle or core-owned instance slots):
+    - selected plugin id
+    - walk state / phase references (per output)
+    - brightness input state (if needed by instance)
+2. Keep palette assets shared and immutable:
+    - cache palettes per plugin once (global read-only cache)
+    - instance state references cached palette by plugin id
+3. Keep compatibility path intact:
+    - legacy `dynamic_step` remains bound to default instance used by onboard today
+    - new sample callers (strip first) use explicit instance-aware path
+4. Add instance-aware sample API surface (additive):
+    - sample by `(instance, plugin_id, noise)` with plugin-type auto-routing still in core
+    - no behavior change for existing onboard caller until explicitly migrated
+5. Migrate outputs incrementally:
+    - strip uses its own dynamic instance first
+    - onboard migrates later after parity verification
+6. Only after parity:
+    - remove reliance on shared mutable globals in dynamic plugin runtime
+    - retire compatibility path if no longer needed
+
+Acceptance criteria:
+- Changing strip dynamic plugin/walk does not alter onboard output.
+- Changing onboard dynamic plugin/walk does not alter strip output.
+- Palette lookups remain plugin-correct for both outputs with no startup WDT regressions.
 
 ---
 

@@ -1,5 +1,6 @@
 #include "rgb_anim_dynamic.h"
 #include "rgb_anim.h"
+#include "rgb_core.h"
 #include "io_rgb.h"
 #include "io_fatfs.h"
 #include "esp_log.h"
@@ -89,6 +90,8 @@ static int s_selected_plugin_id = -1;
 #define MAX_DYNAMIC_ANIMS 12
 static rgb_anim_dynamic_config_t s_configs[MAX_DYNAMIC_ANIMS];
 static int s_config_count = 0;
+static uint8_t *s_palette_cache[MAX_DYNAMIC_ANIMS] = {0};
+static size_t s_palette_cache_size[MAX_DYNAMIC_ANIMS] = {0};
 
 // --- FreeRTOS Task & Semaphore ---
 static SemaphoreHandle_t s_load_png_sem = NULL;
@@ -122,6 +125,56 @@ static int read_image_file(const char *file_member, uint8_t **out_buf, size_t *b
     stbi_image_free(data);
 
     return read_bytes;
+}
+
+static int dynamic_find_config_index_by_plugin_id(uint8_t plugin_id) {
+    for (int i = 0; i < s_config_count; ++i) {
+        if (s_configs[i].id == (int)plugin_id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void dynamic_palette_cache_clear(void) {
+    for (int i = 0; i < MAX_DYNAMIC_ANIMS; ++i) {
+        if (s_palette_cache[i]) {
+            free(s_palette_cache[i]);
+            s_palette_cache[i] = NULL;
+        }
+        s_palette_cache_size[i] = 0;
+    }
+}
+
+static bool dynamic_palette_cache_load_one(int cfg_idx) {
+    if (cfg_idx < 0 || cfg_idx >= s_config_count) {
+        return false;
+    }
+
+    if (s_palette_cache[cfg_idx] && s_palette_cache_size[cfg_idx] >= 3) {
+        return true;
+    }
+
+    uint8_t *palette = NULL;
+    size_t palette_size = 0;
+    int bytes = read_image_file(s_configs[cfg_idx].color_palette_png_path, &palette, &palette_size, 3);
+    if (bytes <= 0 || !palette) {
+        if (palette) {
+            free(palette);
+        }
+        return false;
+    }
+
+    s_palette_cache[cfg_idx] = palette;
+    s_palette_cache_size[cfg_idx] = (size_t)bytes;
+    return true;
+}
+
+static void dynamic_palette_cache_build_all(void) {
+    dynamic_palette_cache_clear();
+    for (int i = 0; i < s_config_count; ++i) {
+        (void)dynamic_palette_cache_load_one(i);
+    }
 }
 
 // Helper: swap two pointers
@@ -504,12 +557,19 @@ static void dynamic_begin(uint8_t *phase_u8);
 static void dynamic_step(rgb_color_t *out_rgb);
 static void dynamic_set_color(rgb_color_t rgb);
 static void dynamic_set_brightness(uint8_t b);
+static bool dynamic_sample_rgb(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb);
 
 static rgb_anim_t s_dynamic_anim = {
     .begin = dynamic_begin,
     .step = dynamic_step,
     .set_color = dynamic_set_color,
     .set_brightness = dynamic_set_brightness,
+};
+
+static rgb_anim_ex_t s_dynamic_anim_ex = {
+    .begin_phase = NULL,
+    .set_brightness = NULL,
+    .sample_rgb = dynamic_sample_rgb,
 };
 
 // Active config index
@@ -539,6 +599,55 @@ static uint8_t brightness_value_noise_rgb(rgb_color_t c, uint8_t noise, uint8_t 
     if (v < 0) v = 0;
     if (v > 255) v = 255;
     return (uint8_t)(((uint16_t)v * user_brightness) >> 8);
+}
+
+static bool dynamic_map_noise_u8_to_rgb(uint8_t plugin_id, uint8_t noise_u8, rgb_color_t *out_rgb) {
+    if (!out_rgb) {
+        return false;
+    }
+
+    const uint8_t *palette_raw = NULL;
+    size_t palette_raw_size = 0;
+
+    int cfg_idx = dynamic_find_config_index_by_plugin_id(plugin_id);
+    if (cfg_idx >= 0 && dynamic_palette_cache_load_one(cfg_idx)) {
+        palette_raw = s_palette_cache[cfg_idx];
+        palette_raw_size = s_palette_cache_size[cfg_idx];
+    }
+
+    // Compatibility fallback: use currently active/loaded palette if per-plugin cache unavailable.
+    if ((!palette_raw || palette_raw_size < 3) && anim_buffers.palette_raw_rgb && anim_buffers.palette_raw_size >= 3) {
+        palette_raw = anim_buffers.palette_raw_rgb;
+        palette_raw_size = anim_buffers.palette_raw_size;
+    }
+
+    if (!palette_raw || palette_raw_size < 3) {
+        return false;
+    }
+
+    size_t palette_count = palette_raw_size / 3;
+    if (palette_count == 0) {
+        return false;
+    }
+
+    size_t palette_idx = ((size_t)noise_u8 * (palette_count - 1)) / 255;
+    const uint8_t *palette = palette_raw + (palette_idx * 3);
+    out_rgb->r = palette[0];
+    out_rgb->g = palette[1];
+    out_rgb->b = palette[2];
+    return true;
+}
+
+// Future-proof helper for normalized noise in [-1, 1] while keeping existing palette PNG assets.
+static bool dynamic_map_noise_f32_to_rgb(uint8_t plugin_id, float noise_f32, rgb_color_t *out_rgb) {
+    if (!out_rgb) {
+        return false;
+    }
+
+    if (noise_f32 < -1.0f) noise_f32 = -1.0f;
+    if (noise_f32 >  1.0f) noise_f32 =  1.0f;
+    uint8_t noise_u8 = (uint8_t)lroundf((noise_f32 + 1.0f) * 127.5f);
+    return dynamic_map_noise_u8_to_rgb(plugin_id, noise_u8, out_rgb);
 }
 
 void alloc_png_bufs(void) {
@@ -595,6 +704,7 @@ void rgb_anim_dynamic_init(void) {
 
     // For each loaded animation, register with io_rgb
     for (int i = 0; i < s_config_count; ++i) {
+        io_rgb_register_rgb_plugin_ex(s_configs[i].id, &s_dynamic_anim_ex);
         io_rgb_register_rgb_plugin(s_configs[i].id, &s_dynamic_anim);
     }
 
@@ -718,4 +828,22 @@ static void dynamic_set_color(rgb_color_t rgb) {
 
 static void dynamic_set_brightness(uint8_t b) {
     s_user_brightness = b;
+}
+
+static bool dynamic_sample_rgb(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb) {
+    if (!in || !out_rgb) {
+        return false;
+    }
+
+    if (!dynamic_map_noise_u8_to_rgb(in->plugin_id, in->in.noise_u8, out_rgb)) {
+        return false;
+    }
+
+    if (in->brightness < 255) {
+        out_rgb->r = (uint8_t)(((uint16_t)out_rgb->r * in->brightness) >> 8);
+        out_rgb->g = (uint8_t)(((uint16_t)out_rgb->g * in->brightness) >> 8);
+        out_rgb->b = (uint8_t)(((uint16_t)out_rgb->b * in->brightness) >> 8);
+    }
+
+    return true;
 }

@@ -15,7 +15,7 @@
 #include "stdint.h"
 #include <string.h>
 
-#define LED_STRIP_GPIO                5
+#define LED_STRIP_GPIO                1
 #define LED_STRIP_LENGTH              DISK_POINTS_COUNT
 #define LED_STRIP_TASK_STACK_WORDS    3072
 #define LED_STRIP_TASK_PRIORITY       5

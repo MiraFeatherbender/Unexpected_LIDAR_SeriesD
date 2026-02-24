@@ -5,6 +5,8 @@ Define a shared walk-spec model for RGB plugins using float-based offsets in nor
 
 This replaces the older `uint8`-based walk increments with float semantics while preserving the existing behavior pattern: choose a random delta each frame from a bounded, quantized range.
 
+Status note: as of current migration phase, this spec is deferred until dynamic/output instancing is finalized; current work keeps walk behavior compatibility-first.
+
 ---
 
 ## Coordinate / Scale Convention
