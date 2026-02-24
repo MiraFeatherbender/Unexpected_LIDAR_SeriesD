@@ -43,6 +43,8 @@ typedef struct {
 } rgb_plugin_entry_t;
 
 static rgb_plugin_entry_t s_rgb_plugins[RGB_PLUGIN_MAX] = {0};
+static const hsv_anim_ex_t *s_hsv_plugins_ex[RGB_PLUGIN_MAX] = {0};
+static const rgb_anim_ex_t *s_rgb_plugins_ex[RGB_PLUGIN_MAX] = {0};
 
 static const rgb_plugin_entry_t *s_active_anim = NULL;
 static hsv_color_t s_current_hsv = {0, 0, 0};
@@ -126,6 +128,20 @@ void rgb_core_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
     rgb_core_register_hsv_plugin(id, plugin);
 }
 
+void rgb_core_register_hsv_plugin_ex(rgb_plugin_id_t id, const hsv_anim_ex_t *plugin)
+{
+    if (id < RGB_PLUGIN_MAX) {
+        s_hsv_plugins_ex[id] = plugin;
+    }
+}
+
+void rgb_core_register_rgb_plugin_ex(rgb_plugin_id_t id, const rgb_anim_ex_t *plugin)
+{
+    if (id < RGB_PLUGIN_MAX) {
+        s_rgb_plugins_ex[id] = plugin;
+    }
+}
+
 void io_rgb_register_hsv_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
 {
     rgb_core_register_hsv_plugin(id, plugin);
@@ -141,6 +157,16 @@ void io_rgb_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin)
     rgb_core_register_plugin(id, plugin);
 }
 
+void io_rgb_register_hsv_plugin_ex(rgb_plugin_id_t id, const hsv_anim_ex_t *plugin)
+{
+    rgb_core_register_hsv_plugin_ex(id, plugin);
+}
+
+void io_rgb_register_rgb_plugin_ex(rgb_plugin_id_t id, const rgb_anim_ex_t *plugin)
+{
+    rgb_core_register_rgb_plugin_ex(id, plugin);
+}
+
 void rgb_core_apply_command(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v, uint8_t brightness)
 {
     hsv_color_t new_hsv = {h, s, v};
@@ -154,29 +180,53 @@ void rgb_core_apply_command(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v, 
         (new_hsv.v != s_last_hsv.v) ||
         (new_brightness != s_last_brightness);
 
+    if (plugin_id >= RGB_PLUGIN_MAX) {
+        return;
+    }
+
     s_active_anim = &s_rgb_plugins[plugin_id];
+    const hsv_anim_ex_t *hsv_ex = s_hsv_plugins_ex[plugin_id];
+    const rgb_anim_ex_t *rgb_ex = s_rgb_plugins_ex[plugin_id];
 
     if (s_active_anim) {
         if (s_active_anim->type == RGB_PLUGIN_TYPE_HSV && s_active_anim->plugin.hsv) {
-            if (plugin_changed && s_active_anim->plugin.hsv->begin)
-                s_active_anim->plugin.hsv->begin(s_phase_ptr);
+            if (plugin_changed) {
+                if (hsv_ex && hsv_ex->begin_phase) {
+                    hsv_ex->begin_phase(s_phase_ptr);
+                }
+                if (s_active_anim->plugin.hsv->begin) {
+                    s_active_anim->plugin.hsv->begin(s_phase_ptr);
+                }
+            }
 
             if (params_changed) {
+                if (hsv_ex && hsv_ex->set_color) {
+                    hsv_ex->set_color(new_hsv);
+                }
                 if (s_active_anim->plugin.hsv->set_color)
                     s_active_anim->plugin.hsv->set_color(new_hsv);
 
+                if (hsv_ex && hsv_ex->set_brightness) {
+                    hsv_ex->set_brightness(new_brightness);
+                }
                 if (s_active_anim->plugin.hsv->set_brightness)
                     s_active_anim->plugin.hsv->set_brightness(new_brightness);
             }
         } else if (s_active_anim->type == RGB_PLUGIN_TYPE_RGB && s_active_anim->plugin.rgb) {
             if (plugin_changed) {
                 rgb_anim_dynamic_select_plugin(plugin_id);
+                if (rgb_ex && rgb_ex->begin_phase) {
+                    rgb_ex->begin_phase(s_phase_ptr);
+                }
                 if (s_active_anim->plugin.rgb->begin) {
                     s_active_anim->plugin.rgb->begin(s_phase_ptr);
                 }
             }
 
             if (params_changed) {
+                if (rgb_ex && rgb_ex->set_brightness) {
+                    rgb_ex->set_brightness(new_brightness);
+                }
                 if (s_active_anim->plugin.rgb->set_brightness)
                     s_active_anim->plugin.rgb->set_brightness(new_brightness);
             }
@@ -212,6 +262,49 @@ bool rgb_core_step_rgb(rgb_color_t *out_rgb)
         out_rgb->b = 0;
         if (s_active_anim->plugin.rgb->step)
             s_active_anim->plugin.rgb->step(out_rgb);
+        return true;
+    }
+
+    return false;
+}
+
+bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb)
+{
+    if (!in || !out_rgb || !s_active_anim || s_last_plugin_id >= RGB_PLUGIN_MAX) {
+        return false;
+    }
+
+    const hsv_anim_ex_t *hsv_ex = s_hsv_plugins_ex[s_last_plugin_id];
+    const rgb_anim_ex_t *rgb_ex = s_rgb_plugins_ex[s_last_plugin_id];
+
+    if (s_active_anim->type == RGB_PLUGIN_TYPE_HSV && s_active_anim->plugin.hsv) {
+        if (in->mode == RGB_CORE_IN_HSV_PHASE && hsv_ex && hsv_ex->sample_hsv_rgb) {
+            if (hsv_ex->sample_hsv_rgb(in, out_rgb)) {
+                return true;
+            }
+        }
+
+        hsv_color_t out_hsv = s_current_hsv;
+        if (s_active_anim->plugin.hsv->step) {
+            s_active_anim->plugin.hsv->step(&out_hsv);
+        }
+        hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &out_rgb->r, &out_rgb->g, &out_rgb->b);
+        return true;
+    }
+
+    if (s_active_anim->type == RGB_PLUGIN_TYPE_RGB && s_active_anim->plugin.rgb) {
+        if (in->mode == RGB_CORE_IN_NOISE_U8 && rgb_ex && rgb_ex->sample_rgb) {
+            if (rgb_ex->sample_rgb(in, out_rgb)) {
+                return true;
+            }
+        }
+
+        out_rgb->r = 0;
+        out_rgb->g = 0;
+        out_rgb->b = 0;
+        if (s_active_anim->plugin.rgb->step) {
+            s_active_anim->plugin.rgb->step(out_rgb);
+        }
         return true;
     }
 
