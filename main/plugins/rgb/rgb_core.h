@@ -9,13 +9,9 @@
 typedef struct {
     uint8_t plugin_id;
     uint8_t brightness;
-    union {
-        struct {
-            hsv_color_t base_hsv;
-            uint8_t *phase_u8;
-        } hsv_phase;
-        uint8_t noise_u8;
-    } in;
+    hsv_color_t base_hsv;
+    uint8_t *phase_u8;
+    uint8_t noise_u8;
 } rgb_core_sample_in_t;
 
 typedef struct {
@@ -53,6 +49,8 @@ void rgb_core_set_phase_ptr(uint8_t *phase_u8);
 void rgb_core_apply_command(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v, uint8_t brightness);
 bool rgb_core_step_rgb(rgb_color_t *out_rgb);
 bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb);
+bool rgb_core_plugin_is_hsv(uint8_t plugin_id);
+bool rgb_core_plugin_is_rgb(uint8_t plugin_id);
 
 void rgb_core_get_snapshot(rgb_core_snapshot_t *snapshot);
 

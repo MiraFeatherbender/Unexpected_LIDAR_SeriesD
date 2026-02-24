@@ -3,6 +3,7 @@
 
 #include "dispatcher.h"
 #include "dispatcher_pool.h"
+#include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -24,6 +25,8 @@ typedef struct {
     TickType_t next_step;
     /* Tick count of last queue-depth warning, used to rate-limit warnings */
     TickType_t last_queue_warn;
+    bool pin_to_core;
+    BaseType_t core_id;
 } dispatcher_module_t;
 
 static inline QueueHandle_t dispatcher_ptr_queue_create_register(dispatch_target_t target, uint16_t queue_len) {

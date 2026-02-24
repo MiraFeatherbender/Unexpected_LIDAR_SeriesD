@@ -313,13 +313,16 @@ static void on_encoder_input(int8_t dir)
         ui_setting_item_handle_encoder(item, dir, now_ms);
 
         setting->current_value = (float)item->value.i32;
-        if (setting->on_change) {
-            ui_setting_value_u val = {0};
-            val.i32 = item->value.i32;
+        bool notify = (setting->on_change != NULL);
+        ui_setting_value_u val = {0};
+        val.i32 = item->value.i32;
+
+        lvgl_port_unlock();
+
+        if (notify) {
             setting->on_change(0, idx, &val);
         }
 
-        lvgl_port_unlock();
         return;
     }
 
@@ -327,22 +330,35 @@ static void on_encoder_input(int8_t dir)
         ui_setting_item_handle_encoder(item, dir, now_ms);
 
         setting->current_value = item->value.f32;
-        if (setting->on_change) {
-            ui_setting_value_u val = {0};
-            val.f32 = item->value.f32;
+        bool notify = (setting->on_change != NULL);
+        ui_setting_value_u val = {0};
+        val.f32 = item->value.f32;
+
+        lvgl_port_unlock();
+
+        if (notify) {
             setting->on_change(0, idx, &val);
         }
 
-        lvgl_port_unlock();
         return;
     }
 
     if (setting->type == UI_SETTING_TYPE_ENUM_DROPDOWN && enum_value_label && s_page_ctx->enum_editing) {
         int current = clamp_index(setting->current_enum_idx, 0, setting->enum_count - 1);
         int next = clamp_index(current + dir, 0, setting->enum_count - 1);
-        set_enum_value(s_page_ctx, idx, next, next != current);
+        bool changed = (next != current);
+        set_enum_value(s_page_ctx, idx, next, false);
+
+        bool notify = changed && (setting->on_change != NULL);
+        ui_setting_value_u val = {0};
+        val.i32 = next;
 
         lvgl_port_unlock();
+
+        if (notify) {
+            setting->on_change(0, idx, &val);
+        }
+
         return;
     }
 

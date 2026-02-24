@@ -9,6 +9,12 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
+#if CONFIG_FREERTOS_UNICORE
+#define RGB_TASK_CORE_ID 0
+#else
+#define RGB_TASK_CORE_ID 1
+#endif
+
 #define RGB_CMD_QUEUE_LEN 8
 #define RGB_TASK_STACK_SIZE 4096
 #define RGB_TASK_PRIORITY 5
@@ -26,11 +32,20 @@ static dispatcher_module_t io_rgb_mod = {
     .step_frame = io_rgb_step_frame,
     .step_ms = 33,
     .queue = NULL,
-    .next_step = 0
+    .next_step = 0,
+    .pin_to_core = true,
+    .core_id = RGB_TASK_CORE_ID,
 };
 
 static uint8_t anim_brightness = 255;
 static uint8_t anim_phase_u8 = 0;
+static rgb_core_sample_in_t s_onboard_sample = {
+    .plugin_id = RGB_PLUGIN_OFF,
+    .brightness = 255,
+    .base_hsv = {0, 0, 0},
+    .phase_u8 = &anim_phase_u8,
+    .noise_u8 = 127,
+};
 
 
 void io_rgb_set_anim_brightness(uint8_t b)
@@ -101,8 +116,21 @@ static void io_rgb_step_frame(void)
         rest_off_until = 0;
     }
 
+    rgb_core_snapshot_t snapshot = {0};
+    rgb_core_get_snapshot(&snapshot);
+
+    s_onboard_sample.plugin_id = snapshot.plugin_id;
+    s_onboard_sample.brightness = snapshot.brightness;
+    s_onboard_sample.base_hsv = snapshot.hsv;
+    s_onboard_sample.noise_u8 = 127;
+
     rgb_color_t out_rgb = {0, 0, 0};
-    if (rgb_core_step_rgb(&out_rgb)) {
+    bool sampled = false;
+    if (s_onboard_sample.plugin_id < RGB_PLUGIN_MAX) {
+        sampled = rgb_core_sample(&s_onboard_sample, &out_rgb);
+    }
+
+    if (sampled || rgb_core_step_rgb(&out_rgb)) {
         ums3_set_pixel_brightness(anim_brightness);
         ums3_set_pixel_color(out_rgb.r, out_rgb.g, out_rgb.b);
     }

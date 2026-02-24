@@ -38,8 +38,8 @@ static bool solid_sample_hsv(const rgb_core_sample_in_t *in, hsv_color_t *out_hs
         return false;
     }
 
-    out_hsv->h = in->in.hsv_phase.base_hsv.h;
-    out_hsv->s = in->in.hsv_phase.base_hsv.s;
+    out_hsv->h = in->base_hsv.h;
+    out_hsv->s = in->base_hsv.s;
     out_hsv->v = in->brightness;
     return true;
 }

@@ -10,6 +10,12 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
+#if CONFIG_FREERTOS_UNICORE
+#define RGB_CORE_TASK_CORE_ID 0
+#else
+#define RGB_CORE_TASK_CORE_ID 1
+#endif
+
 #define RGB_CORE_CMD_QUEUE_LEN 8
 #define RGB_CORE_TASK_STACK_SIZE 4096
 #define RGB_CORE_TASK_PRIORITY 5
@@ -27,6 +33,8 @@ static dispatcher_module_t rgb_core_mod = {
     .step_ms = 0,
     .queue = NULL,
     .next_step = 0,
+    .pin_to_core = true,
+    .core_id = RGB_CORE_TASK_CORE_ID,
 };
 
 typedef enum {
@@ -332,6 +340,26 @@ bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb)
     }
 
     return false;
+}
+
+bool rgb_core_plugin_is_hsv(uint8_t plugin_id)
+{
+    if (plugin_id >= RGB_PLUGIN_MAX) {
+        return false;
+    }
+
+    const rgb_plugin_entry_t *anim = &s_rgb_plugins[plugin_id];
+    return (anim->type == RGB_PLUGIN_TYPE_HSV) && (anim->plugin.hsv != NULL);
+}
+
+bool rgb_core_plugin_is_rgb(uint8_t plugin_id)
+{
+    if (plugin_id >= RGB_PLUGIN_MAX) {
+        return false;
+    }
+
+    const rgb_plugin_entry_t *anim = &s_rgb_plugins[plugin_id];
+    return (anim->type == RGB_PLUGIN_TYPE_RGB) && (anim->plugin.rgb != NULL);
 }
 
 void rgb_core_get_snapshot(rgb_core_snapshot_t *snapshot)

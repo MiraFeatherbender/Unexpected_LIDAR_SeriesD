@@ -60,16 +60,16 @@ static bool breathe_sample_hsv(const rgb_core_sample_in_t *in, hsv_color_t *out_
         return false;
     }
 
-    if (!in->in.hsv_phase.phase_u8) {
+    if (!in->phase_u8) {
         return false;
     }
 
-    const hsv_color_t base_hsv = in->in.hsv_phase.base_hsv;
-    uint8_t phase = *in->in.hsv_phase.phase_u8;
+    const hsv_color_t base_hsv = in->base_hsv;
+    uint8_t phase = *in->phase_u8;
 
     uint8_t intensity = (phase < 128) ? phase : (255 - phase);
     phase = (phase + breathe_speed) & 0xFF;
-    *in->in.hsv_phase.phase_u8 = phase;
+    *in->phase_u8 = phase;
 
     uint16_t scaled_v = (intensity * in->brightness) >> 8;
 

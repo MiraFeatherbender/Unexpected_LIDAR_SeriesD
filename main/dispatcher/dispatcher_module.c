@@ -88,12 +88,17 @@ BaseType_t dispatcher_module_start(dispatcher_module_t *module) {
     char task_name[16] = {0};
     snprintf(task_name, sizeof(task_name), "%s_ptr", name);
 
-    BaseType_t ok = xTaskCreate(dispatcher_module_ptr_task, task_name, module->stack_size, module, module->task_prio, NULL);
+    BaseType_t ok = pdFALSE;
+    if (module->pin_to_core) {
+        ok = xTaskCreatePinnedToCore(dispatcher_module_ptr_task, task_name, module->stack_size, module, module->task_prio, NULL, module->core_id);
+    } else {
+        ok = xTaskCreate(dispatcher_module_ptr_task, task_name, module->stack_size, module, module->task_prio, NULL);
+    }
     if (ok != pdPASS) {
-        ESP_LOGE(name, "Failed to create pointer task (stack=%u)", (unsigned)module->stack_size);
+        ESP_LOGE(name, "Failed to create pointer task (stack=%u, pin=%d, core=%d)", (unsigned)module->stack_size, (int)module->pin_to_core, (int)module->core_id);
         return pdFALSE;
     }
 
-    ESP_LOGI(name, "Module started (stack=%u, queue_len=%u, step_ms=%u)", (unsigned)module->stack_size, (unsigned)module->queue_len, (unsigned)module->step_ms);
+    ESP_LOGI(name, "Module started (stack=%u, queue_len=%u, step_ms=%u, pin=%d, core=%d)", (unsigned)module->stack_size, (unsigned)module->queue_len, (unsigned)module->step_ms, (int)module->pin_to_core, (int)module->core_id);
     return pdTRUE;
 }
