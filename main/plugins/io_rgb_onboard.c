@@ -29,7 +29,8 @@ static dispatcher_module_t io_rgb_mod = {
     .next_step = 0
 };
 
-static uint8_t anim_brightness = 0;
+static uint8_t anim_brightness = 255;
+static uint8_t anim_phase_u8 = 0;
 
 
 void io_rgb_set_anim_brightness(uint8_t b)
@@ -43,6 +44,7 @@ void io_rgb_init(void)
     // Initialize RGB hardware
     ums3_set_pixel_brightness(anim_brightness);
     ums3_set_pixel_color(0, 0, 0);    
+    rgb_core_set_phase_ptr(&anim_phase_u8);
     
     if (dispatcher_module_start(&io_rgb_mod) != pdTRUE) {
         ESP_LOGE("io_rgb", "Failed to start dispatcher module for io_rgb");

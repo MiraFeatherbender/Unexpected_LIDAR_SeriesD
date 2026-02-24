@@ -1,6 +1,7 @@
 #include "rgb_anim.h"
 #include "UMSeriesD_idf.h"
 #include <math.h>
+#include <stddef.h>
 
 // Internal HSV state
 static hsv_color_t heartbeat_hsv = {0, 0, 0};
@@ -8,6 +9,7 @@ static uint8_t heartbeat_brightness = 255;
 static uint16_t heartbeat_phase = 0;
 static uint8_t heartbeat_speed = 4;   // default phase increment
 static uint8_t heartbeat_waveform[256] = {0};
+static uint8_t *heartbeat_phase_ref = NULL;
 
 // Prerecorded heartbeat waveform (0–255)
 static const uint8_t heartbeat_ecg[256] = {48, 47, 45, 45, 45, 46, 48, 49, 49, 47, 45, 43, 43, 43, 44, 44, 
@@ -27,17 +29,27 @@ static const uint8_t heartbeat_ecg[256] = {48, 47, 45, 45, 45, 46, 48, 49, 49, 4
                                     43, 42, 41, 40, 40, 41, 42, 43, 43, 42, 41, 41, 41, 43, 44, 46, 
                                     46, 46, 45, 45, 45, 46, 47, 49, 49, 50, 50, 50, 50, 50, 51, 51, 50};
 
-static void heartbeat_begin(int idx)
+static void heartbeat_begin(uint8_t *phase_u8)
 {
-    (void)idx;
+    heartbeat_phase_ref = phase_u8;
+    if (heartbeat_phase_ref) {
+        *heartbeat_phase_ref = 0;
+        return;
+    }
     heartbeat_phase = 0;
 }
 
 // Updated: step() outputs HSV via pointer
 static void heartbeat_step(hsv_color_t *out_hsv)
 {
-    uint8_t intensity = heartbeat_waveform[heartbeat_phase];
-    heartbeat_phase = (heartbeat_phase + heartbeat_speed) & 0xFF;
+    uint8_t phase = heartbeat_phase_ref ? *heartbeat_phase_ref : (uint8_t)heartbeat_phase;
+    uint8_t intensity = heartbeat_waveform[phase];
+    phase = (phase + heartbeat_speed) & 0xFF;
+    if (heartbeat_phase_ref) {
+        *heartbeat_phase_ref = phase;
+    } else {
+        heartbeat_phase = phase;
+    }
 
     // Scale intensity by peak brightness (0–255)
     uint16_t scaled_v = (intensity * heartbeat_brightness) >> 8;

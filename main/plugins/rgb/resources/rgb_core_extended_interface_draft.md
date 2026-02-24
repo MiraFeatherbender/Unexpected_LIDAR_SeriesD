@@ -33,6 +33,7 @@ typedef enum {
 // Explicit caller-provided sampling input.
 typedef struct {
     rgb_core_input_mode_t mode;
+    uint8_t brightness;        // explicit brightness for this sample (0..255)
     union {
         struct {
             hsv_color_t base_hsv;
@@ -104,6 +105,7 @@ Canonical call examples:
 // Example A: HSV + explicit phase sampling
 rgb_core_sample_in_t in_hsv = {
     .mode = RGB_CORE_IN_HSV_PHASE,
+    .brightness = 200,
     .in.hsv_phase = {
         .base_hsv = (hsv_color_t){ .h = 10, .s = 255, .v = 180 },
         .phase_u8 = 64,
@@ -118,6 +120,7 @@ bool ok = rgb_core_sample(&in_hsv, &out_rgb);
 // Example B: direct noise sample -> palette/noise RGB mapping
 rgb_core_sample_in_t in_noise = {
     .mode = RGB_CORE_IN_NOISE_U8,
+    .brightness = 180,
     .in.noise_u8 = 173,
 };
 
@@ -140,6 +143,7 @@ Implementation note: `rgb_core_step_rgb()` can internally call `rgb_core_sample(
 1. If active plugin has EX registration:
     - EX-HSV plugin: call `sample_hsv_rgb(...)` when mode is `RGB_CORE_IN_HSV_PHASE`.
     - EX-RGB plugin: call `sample_rgb(...)` when mode is `RGB_CORE_IN_NOISE_U8`.
+    - In EX path, `in->brightness` is an input parameter; plugin-defined behavior determines how/if it affects output.
 2. Else fallback to legacy registration:
    - legacy HSV plugin path (`step(hsv*)`) -> convert HSV to RGB as needed.
    - legacy RGB plugin path (`step(rgb*)`).
@@ -160,12 +164,14 @@ Implementation note: `rgb_core_step_rgb()` can internally call `rgb_core_sample(
 ---
 
 ## Migration plan (plugin-by-plugin)
-1. Add new EX types + registration + `rgb_core_sample()` with fallback.
-2. Convert one strip-selected plugin first (register EX + legacy retained).
-3. Make strip sampling path call `rgb_core_sample()` with `noise_u8`/`phase` input.
-4. Convert HSV plugins incrementally to EX (`sample_hsv`).
-5. Convert dynamic plugin to EX (`sample_rgb`) after walk/noise backend update.
-6. Remove legacy callbacks only when all plugins are migrated and verified.
+1. Migrate plugin begin signatures first to phase-pointer form (`begin_phase(uint8_t *phase_u8)` behavior) and update the onboard caller path to own/pass phase explicitly.
+2. Add EX scaffolding in core (`*_ex` registrations + `rgb_core_sample()`), with strict fallback to existing legacy paths.
+3. Keep onboard path on compatibility helper (`rgb_core_step_rgb()`) for non-migrated plugins so existing runtime behavior remains unchanged while EX work lands.
+4. Convert one low-risk HSV plugin first to EX (`sample_hsv_rgb` + `begin_phase`) while retaining legacy callback registration during transition.
+5. Migrate strip sampling path to `rgb_core_sample()` and pass explicit caller-owned inputs (`brightness`, and either `phase_u8` or `noise_u8` by mode).
+6. Convert dynamic/palette-noise plugin to EX `sample_rgb` after walk/noise backend alignment, keeping legacy registration active during transition.
+7. Convert remaining plugins incrementally, preserving plugin-defined brightness behavior and phase-ignore behavior where applicable.
+8. Remove legacy callback reliance only after all active plugins are EX-capable and parity-verified across onboard + strip outputs.
 
 ---
 

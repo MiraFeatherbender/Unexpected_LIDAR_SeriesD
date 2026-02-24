@@ -82,6 +82,7 @@ struct rgb_anim_dynamic_config {
 static noise_walk_state_t s_contrast_walk = {0};
 static noise_walk_state_t s_brightness_walk = {0};
 static uint8_t s_user_brightness = 255;
+static int s_selected_plugin_id = -1;
 
 
 // Static array of loaded configs
@@ -499,7 +500,7 @@ static void Load_PNG_Task(void *pvParameters) {
 }
 
 // Forward declarations for plugin interface
-static void dynamic_begin(int idx);
+static void dynamic_begin(uint8_t *phase_u8);
 static void dynamic_step(rgb_color_t *out_rgb);
 static void dynamic_set_color(rgb_color_t rgb);
 static void dynamic_set_brightness(uint8_t b);
@@ -647,8 +648,21 @@ int rgb_anim_dynamic_count(void) {
     return s_config_count;
 }
 
+void rgb_anim_dynamic_select_plugin(uint8_t plugin_id) {
+    s_selected_plugin_id = (int)plugin_id;
+}
+
 // --- Plugin interface implementations ---
-static void dynamic_begin(int idx) {
+static void dynamic_begin(uint8_t *phase_u8) {
+    if (phase_u8) {
+        *phase_u8 = 0;
+    }
+
+    int idx = s_selected_plugin_id;
+    if (idx < 0) {
+        idx = 0;
+    }
+
     // Set the active config index for this plugin instance
     s_active_idx = idx;
     for(int i = 0; i < s_config_count; i++) {

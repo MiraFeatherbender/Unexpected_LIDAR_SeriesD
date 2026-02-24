@@ -18,6 +18,8 @@ void rgb_core_register_hsv_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin);
 void rgb_core_register_rgb_plugin(rgb_plugin_id_t id, const rgb_anim_t *plugin);
 void rgb_core_register_plugin(rgb_plugin_id_t id, const hsv_anim_t *plugin);
 
+void rgb_core_set_phase_ptr(uint8_t *phase_u8);
+
 void rgb_core_apply_command(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v, uint8_t brightness);
 bool rgb_core_step_rgb(rgb_color_t *out_rgb);
 

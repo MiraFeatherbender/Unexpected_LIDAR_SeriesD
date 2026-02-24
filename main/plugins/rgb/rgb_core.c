@@ -47,6 +47,8 @@ static rgb_plugin_entry_t s_rgb_plugins[RGB_PLUGIN_MAX] = {0};
 static const rgb_plugin_entry_t *s_active_anim = NULL;
 static hsv_color_t s_current_hsv = {0, 0, 0};
 static uint8_t s_current_brightness = 255;
+static uint8_t s_phase_fallback = 0;
+static uint8_t *s_phase_ptr = &s_phase_fallback;
 
 static uint8_t s_last_plugin_id = RGB_PLUGIN_MAX;
 static hsv_color_t s_last_hsv = {0, 0, 0};
@@ -70,6 +72,11 @@ void rgb_core_init(void)
         ESP_LOGE("rgb_core", "Failed to start dispatcher module for rgb_core");
         return;
     }
+}
+
+void rgb_core_set_phase_ptr(uint8_t *phase_u8)
+{
+    s_phase_ptr = phase_u8 ? phase_u8 : &s_phase_fallback;
 }
 
 static void hsv8_to_rgb888(uint8_t h, uint8_t s, uint8_t v,
@@ -152,7 +159,7 @@ void rgb_core_apply_command(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v, 
     if (s_active_anim) {
         if (s_active_anim->type == RGB_PLUGIN_TYPE_HSV && s_active_anim->plugin.hsv) {
             if (plugin_changed && s_active_anim->plugin.hsv->begin)
-                s_active_anim->plugin.hsv->begin(plugin_id);
+                s_active_anim->plugin.hsv->begin(s_phase_ptr);
 
             if (params_changed) {
                 if (s_active_anim->plugin.hsv->set_color)
@@ -162,8 +169,12 @@ void rgb_core_apply_command(uint8_t plugin_id, uint8_t h, uint8_t s, uint8_t v, 
                     s_active_anim->plugin.hsv->set_brightness(new_brightness);
             }
         } else if (s_active_anim->type == RGB_PLUGIN_TYPE_RGB && s_active_anim->plugin.rgb) {
-            if (plugin_changed && s_active_anim->plugin.rgb->begin)
-                s_active_anim->plugin.rgb->begin(plugin_id);
+            if (plugin_changed) {
+                rgb_anim_dynamic_select_plugin(plugin_id);
+                if (s_active_anim->plugin.rgb->begin) {
+                    s_active_anim->plugin.rgb->begin(s_phase_ptr);
+                }
+            }
 
             if (params_changed) {
                 if (s_active_anim->plugin.rgb->set_brightness)

@@ -5,9 +5,11 @@
 static hsv_color_t off_hsv = {0, 0, 0};
 static uint8_t off_brightness = 0;
 
-static void off_begin(int idx)
+static void off_begin(uint8_t *phase_u8)
 {
-    (void)idx;
+    if (phase_u8) {
+        *phase_u8 = 0;
+    }
     // No hardware calls; just reset state if needed
 }
 

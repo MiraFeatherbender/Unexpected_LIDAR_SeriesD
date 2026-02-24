@@ -9,6 +9,9 @@ void rgb_anim_dynamic_init(void);
 // Optional: reload JSON config at runtime
 bool rgb_anim_dynamic_reload(void);
 
+// Select dynamic plugin ID to be activated on next begin()
+void rgb_anim_dynamic_select_plugin(uint8_t plugin_id);
+
 // Internal: structure for loaded animation config (opaque to users)
 typedef struct rgb_anim_dynamic_config rgb_anim_dynamic_config_t;
 
