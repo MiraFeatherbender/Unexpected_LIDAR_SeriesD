@@ -1,4 +1,5 @@
 #include "rgb_anim.h"
+#include "rgb_core.h"
 #include "UMSeriesD_idf.h"
 #include <stddef.h>
 
@@ -53,6 +54,31 @@ static void breathe_set_brightness(uint8_t b)
     breathe_brightness = b;
 }
 
+static bool breathe_sample_hsv(const rgb_core_sample_in_t *in, hsv_color_t *out_hsv)
+{
+    if (!in || !out_hsv || in->mode != RGB_CORE_IN_HSV_PHASE) {
+        return false;
+    }
+
+    if (!in->in.hsv_phase.phase_u8) {
+        return false;
+    }
+
+    const hsv_color_t base_hsv = in->in.hsv_phase.base_hsv;
+    uint8_t phase = *in->in.hsv_phase.phase_u8;
+
+    uint8_t intensity = (phase < 128) ? phase : (255 - phase);
+    phase = (phase + breathe_speed) & 0xFF;
+    *in->in.hsv_phase.phase_u8 = phase;
+
+    uint16_t scaled_v = (intensity * in->brightness) >> 8;
+
+    out_hsv->h = base_hsv.h;
+    out_hsv->s = base_hsv.s;
+    out_hsv->v = (uint8_t)scaled_v;
+    return true;
+}
+
 static const hsv_anim_t breathe_plugin = {
     .begin = breathe_begin,
     .step = breathe_step,
@@ -60,7 +86,15 @@ static const hsv_anim_t breathe_plugin = {
     .set_brightness = breathe_set_brightness,
 };
 
+static const hsv_anim_ex_t breathe_plugin_ex = {
+    .begin_phase = breathe_begin,
+    .set_color = breathe_set_color,
+    .set_brightness = breathe_set_brightness,
+    .sample_hsv = breathe_sample_hsv,
+};
+
 void rgb_anim_breathe_init(void)
 {
+    io_rgb_register_hsv_plugin_ex(RGB_PLUGIN_BREATHE, &breathe_plugin_ex);
     io_rgb_register_plugin(RGB_PLUGIN_BREATHE, &breathe_plugin);
 }

@@ -3,6 +3,8 @@
 #include "dispatcher.h"
 #include "dispatcher_module.h"
 #include "io_rgb_led_fnl_contract.h"
+#include "rgb_core.h"
+#include "rgb_anim.h"
 
 #include "esp_check.h"
 #include "esp_log.h"
@@ -17,7 +19,7 @@
 #define LED_STRIP_LENGTH              DISK_POINTS_COUNT
 #define LED_STRIP_TASK_STACK_WORDS    3072
 #define LED_STRIP_TASK_PRIORITY       5
-#define LED_STRIP_STEP_DELAY_MS       100
+#define LED_STRIP_STEP_DELAY_MS       33
 #define LED_STRIP_CMD_QUEUE_LEN       8
 
 #define LED_LEVEL_S                   255
@@ -25,6 +27,12 @@
 
 static const char *TAG = "io_rgb_led";
 static led_strip_handle_t s_led_strip = NULL;
+
+// Temporary test vector: heartbeat plugin with existing baseline HSVB values
+static const rgb_plugin_id_t s_strip_test_plugin = RGB_PLUGIN_OFF;
+static const hsv_color_t s_strip_test_hsv = { .h = 88, .s = 255, .v = 220 };
+static const uint8_t s_strip_test_brightness = 255;
+static uint8_t s_strip_phase_u8 = 0;
 
 static fnl_state s_noise_active;
 static fnl_state s_noise_pending;
@@ -114,20 +122,23 @@ static void io_rgb_led_process_msg(const dispatcher_msg_t *msg)
 
 static void io_rgb_led_step_frame(void)
 {
-    io_rgb_led_apply_pending_state_if_any();
+    rgb_core_sample_in_t in = {
+        .mode = RGB_CORE_IN_HSV_PHASE,
+        .plugin_id = s_strip_test_plugin,
+        .brightness = s_strip_test_brightness,
+        .in.hsv_phase = {
+            .base_hsv = s_strip_test_hsv,
+            .phase_u8 = &s_strip_phase_u8,
+        },
+    };
 
-    float pixel_x, pixel_y;
-    float noise_val;
-    uint16_t hue;
+    rgb_color_t out_rgb = {0, 0, 0};
+    if (!rgb_core_sample(&in, &out_rgb)) {
+        return;
+    }
 
     for (uint32_t index = 0; index < LED_STRIP_LENGTH; ++index) {
-        pixel_x = disk_points[index].x;
-        pixel_y = disk_points[index].y;
-
-        noise_val = fnlGetNoise2D(&s_noise_active, pixel_x, pixel_y);
-        hue = map(noise_val);
-
-        ESP_ERROR_CHECK(led_strip_set_pixel_hsv(s_led_strip, index, hue, LED_LEVEL_S, LED_LEVEL_V));
+        ESP_ERROR_CHECK(led_strip_set_pixel(s_led_strip, index, out_rgb.r, out_rgb.g, out_rgb.b));
     }
 
     ESP_ERROR_CHECK(led_strip_refresh(s_led_strip));

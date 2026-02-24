@@ -1,4 +1,5 @@
 #include "rgb_anim.h"
+#include "rgb_core.h"
 #include "UMSeriesD_idf.h"
 #include <math.h>
 #include <stddef.h>
@@ -71,6 +72,30 @@ static void heartbeat_set_brightness(uint8_t b)
     heartbeat_brightness = b;
 }
 
+static bool heartbeat_sample_hsv(const rgb_core_sample_in_t *in, hsv_color_t *out_hsv)
+{
+    if (!in || !out_hsv || in->mode != RGB_CORE_IN_HSV_PHASE) {
+        return false;
+    }
+
+    if (!in->in.hsv_phase.phase_u8) {
+        return false;
+    }
+
+    const hsv_color_t base_hsv = in->in.hsv_phase.base_hsv;
+    uint8_t phase = *in->in.hsv_phase.phase_u8;
+    uint8_t intensity = heartbeat_waveform[phase];
+
+    phase = (phase + heartbeat_speed) & 0xFF;
+    *in->in.hsv_phase.phase_u8 = phase;
+
+    uint16_t scaled_v = (intensity * in->brightness) >> 8;
+    out_hsv->h = base_hsv.h;
+    out_hsv->s = base_hsv.s;
+    out_hsv->v = (uint8_t)scaled_v;
+    return true;
+}
+
 static const hsv_anim_t heartbeat_plugin = {
     .begin = heartbeat_begin,
     .step = heartbeat_step,
@@ -78,8 +103,16 @@ static const hsv_anim_t heartbeat_plugin = {
     .set_brightness = heartbeat_set_brightness,
 };
 
+static const hsv_anim_ex_t heartbeat_plugin_ex = {
+    .begin_phase = heartbeat_begin,
+    .set_color = heartbeat_set_color,
+    .set_brightness = heartbeat_set_brightness,
+    .sample_hsv = heartbeat_sample_hsv,
+};
+
 void rgb_anim_heartbeat_init(void)
 {
+    io_rgb_register_hsv_plugin_ex(RGB_PLUGIN_HEARTBEAT, &heartbeat_plugin_ex);
     io_rgb_register_plugin(RGB_PLUGIN_HEARTBEAT, &heartbeat_plugin);
     float gamma = 0.78f;
 

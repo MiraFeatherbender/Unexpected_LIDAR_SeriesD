@@ -270,40 +270,63 @@ bool rgb_core_step_rgb(rgb_color_t *out_rgb)
 
 bool rgb_core_sample(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb)
 {
-    if (!in || !out_rgb || !s_active_anim || s_last_plugin_id >= RGB_PLUGIN_MAX) {
+    if (!in || !out_rgb) {
         return false;
     }
 
-    const hsv_anim_ex_t *hsv_ex = s_hsv_plugins_ex[s_last_plugin_id];
-    const rgb_anim_ex_t *rgb_ex = s_rgb_plugins_ex[s_last_plugin_id];
+    uint8_t plugin_id = in->plugin_id;
+    if (plugin_id >= RGB_PLUGIN_MAX) {
+        if (s_last_plugin_id >= RGB_PLUGIN_MAX) {
+            return false;
+        }
+        plugin_id = s_last_plugin_id;
+    }
 
-    if (s_active_anim->type == RGB_PLUGIN_TYPE_HSV && s_active_anim->plugin.hsv) {
-        if (in->mode == RGB_CORE_IN_HSV_PHASE && hsv_ex && hsv_ex->sample_hsv_rgb) {
-            if (hsv_ex->sample_hsv_rgb(in, out_rgb)) {
+    const rgb_plugin_entry_t *anim = &s_rgb_plugins[plugin_id];
+    if (!anim) {
+        return false;
+    }
+
+    const hsv_anim_ex_t *hsv_ex = s_hsv_plugins_ex[plugin_id];
+    const rgb_anim_ex_t *rgb_ex = s_rgb_plugins_ex[plugin_id];
+
+    if (anim->type == RGB_PLUGIN_TYPE_HSV && anim->plugin.hsv) {
+        if (in->mode == RGB_CORE_IN_HSV_PHASE && hsv_ex && hsv_ex->sample_hsv) {
+            hsv_color_t out_hsv = s_current_hsv;
+            if (hsv_ex->sample_hsv(in, &out_hsv)) {
+                hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &out_rgb->r, &out_rgb->g, &out_rgb->b);
                 return true;
             }
         }
 
+        if (plugin_id != s_last_plugin_id || anim != s_active_anim) {
+            return false;
+        }
+
         hsv_color_t out_hsv = s_current_hsv;
-        if (s_active_anim->plugin.hsv->step) {
-            s_active_anim->plugin.hsv->step(&out_hsv);
+        if (anim->plugin.hsv->step) {
+            anim->plugin.hsv->step(&out_hsv);
         }
         hsv8_to_rgb888(out_hsv.h, out_hsv.s, out_hsv.v, &out_rgb->r, &out_rgb->g, &out_rgb->b);
         return true;
     }
 
-    if (s_active_anim->type == RGB_PLUGIN_TYPE_RGB && s_active_anim->plugin.rgb) {
+    if (anim->type == RGB_PLUGIN_TYPE_RGB && anim->plugin.rgb) {
         if (in->mode == RGB_CORE_IN_NOISE_U8 && rgb_ex && rgb_ex->sample_rgb) {
             if (rgb_ex->sample_rgb(in, out_rgb)) {
                 return true;
             }
         }
 
+        if (plugin_id != s_last_plugin_id || anim != s_active_anim) {
+            return false;
+        }
+
         out_rgb->r = 0;
         out_rgb->g = 0;
         out_rgb->b = 0;
-        if (s_active_anim->plugin.rgb->step) {
-            s_active_anim->plugin.rgb->step(out_rgb);
+        if (anim->plugin.rgb->step) {
+            anim->plugin.rgb->step(out_rgb);
         }
         return true;
     }

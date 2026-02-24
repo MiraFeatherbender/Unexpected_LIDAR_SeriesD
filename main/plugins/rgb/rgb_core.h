@@ -13,11 +13,12 @@ typedef enum {
 
 typedef struct {
     rgb_core_input_mode_t mode;
+    uint8_t plugin_id;
     uint8_t brightness;
     union {
         struct {
             hsv_color_t base_hsv;
-            uint8_t phase_u8;
+            uint8_t *phase_u8;
         } hsv_phase;
         uint8_t noise_u8;
     } in;
@@ -27,7 +28,7 @@ typedef struct {
     void (*begin_phase)(uint8_t *phase_u8);
     void (*set_color)(hsv_color_t hsv);
     void (*set_brightness)(uint8_t b);
-    bool (*sample_hsv_rgb)(const rgb_core_sample_in_t *in, rgb_color_t *out_rgb);
+    bool (*sample_hsv)(const rgb_core_sample_in_t *in, hsv_color_t *out_hsv);
 } hsv_anim_ex_t;
 
 typedef struct {

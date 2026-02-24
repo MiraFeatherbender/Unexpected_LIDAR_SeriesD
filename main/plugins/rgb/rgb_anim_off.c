@@ -1,4 +1,5 @@
 #include "rgb_anim.h"
+#include "rgb_core.h"
 #include "UMSeriesD_idf.h"
 
 // Internal HSV state (kept for consistency)
@@ -31,6 +32,18 @@ static void off_set_brightness(uint8_t b)
     off_brightness = b; // ignored but stored
 }
 
+static bool off_sample_hsv(const rgb_core_sample_in_t *in, hsv_color_t *out_hsv)
+{
+    if (!in || !out_hsv || in->mode != RGB_CORE_IN_HSV_PHASE) {
+        return false;
+    }
+
+    out_hsv->h = in->in.hsv_phase.base_hsv.h;
+    out_hsv->s = in->in.hsv_phase.base_hsv.s;
+    out_hsv->v = 0;
+    return true;
+}
+
 static const hsv_anim_t off_plugin = {
     .begin = off_begin,
     .step = off_step,
@@ -38,7 +51,15 @@ static const hsv_anim_t off_plugin = {
     .set_brightness = off_set_brightness,
 };
 
+static const hsv_anim_ex_t off_plugin_ex = {
+    .begin_phase = off_begin,
+    .set_color = off_set_color,
+    .set_brightness = off_set_brightness,
+    .sample_hsv = off_sample_hsv,
+};
+
 void rgb_anim_off_init(void)
 {
+    io_rgb_register_hsv_plugin_ex(RGB_PLUGIN_OFF, &off_plugin_ex);
     io_rgb_register_plugin(RGB_PLUGIN_OFF, &off_plugin);
 }
