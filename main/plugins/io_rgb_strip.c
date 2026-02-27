@@ -38,7 +38,7 @@ static uint8_t s_led_phase_u8[LED_STRIP_LENGTH];
 // Temporary test vector: heartbeat plugin with existing baseline HSVB values
 static const rgb_plugin_id_t s_strip_test_plugin = RGB_PLUGIN_FIRE;
 static const hsv_color_t s_strip_test_hsv = { .h = 88, .s = 255, .v = 220 };
-static const uint8_t s_strip_test_brightness = 128;
+static const uint8_t s_strip_test_brightness = 30;
 
 static fnl_state s_noise_active;
 static fnl_state s_noise_pending;

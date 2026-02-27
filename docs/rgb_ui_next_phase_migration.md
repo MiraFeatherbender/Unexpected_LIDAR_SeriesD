@@ -281,3 +281,123 @@ Acceptance criteria:
 
 ## Recommended Immediate Next Step
 Implement **Phase A** (manual x/y/z stepping collection and strip integration) with float-backed runtime values and long-session interaction testing before reintroducing walk windows.
+
+---
+
+## Selector Lab Plan (non-breaking)
+
+This section defines a safe intermediate phase to validate selector + child-settings behavior before moving FNL into selector flow.
+
+### Why this lab exists
+- Current FNL page is a top-level page and already works as a known baseline.
+- Selector/child experiments should not require touching that working baseline first.
+- Use low-risk test collections (Brightness + HSV) to validate lifecycle, input ownership, and settings-template hardening.
+
+### Rule of engagement
+- Keep `pages.def` top-level behavior unchanged while building the lab.
+- Keep existing FNL top-level page untouched until selector lab is proven stable.
+- Introduce new APIs as additive; no destructive refactor until lab acceptance is met.
+
+### ui_core additive API (proposal)
+
+Add a lightweight child-page host API in `ui_core`:
+
+```c
+// ui/ui_core.h
+typedef struct {
+  const ui_page_t *page;
+  lv_obj_t *host_parent;
+  bool active;
+} ui_core_child_ctx_t;
+
+esp_err_t ui_core_child_open(const ui_page_t *child_page, lv_obj_t *host_parent);
+esp_err_t ui_core_child_close(void);
+bool ui_core_child_is_open(void);
+const ui_page_t *ui_core_child_active_page(void);
+```
+
+Behavior:
+- Child runs inside current top-level page tile (`host_parent`).
+- While child is open, horizontal page navigation is ignored.
+- `ui_core` owns child lifecycle (`init/show` on open, `hide/deinit` on close).
+- Top-level page indicator/title remain bound to parent page (no global page list mutation).
+
+### settings template hardening API (proposal)
+
+Create instance-based settings API while retaining current singleton wrappers:
+
+```c
+// ui/pages/ui_page_settings.h
+typedef struct ui_page_settings_inst_s ui_page_settings_inst_t;
+
+esp_err_t ui_page_settings_inst_create(
+  const ui_setting_collection_t *collection,
+  lv_obj_t *tile,
+  ui_page_settings_inst_t **out_inst);
+
+void ui_page_settings_inst_show(ui_page_settings_inst_t *inst);
+void ui_page_settings_inst_hide(ui_page_settings_inst_t *inst);
+void ui_page_settings_inst_destroy(ui_page_settings_inst_t *inst);
+void ui_page_settings_inst_handle_encoder(ui_page_settings_inst_t *inst, int8_t dir);
+bool ui_page_settings_inst_can_exit(ui_page_settings_inst_t *inst);
+```
+
+Compatibility:
+- Existing `ui_page_settings_init/show/hide/deinit` remain as wrappers over one default instance.
+- Existing top-level FNL page compiles and behaves unchanged.
+
+### Encoder ownership model (explicit)
+
+One owner per mode; no dual callback arbitration:
+
+```c
+typedef enum {
+  UI_INPUT_MODE_PAGE_NAV = 0,
+  UI_INPUT_MODE_SELECTOR_NAV,
+  UI_INPUT_MODE_SETTINGS_NAV,
+  UI_INPUT_MODE_SETTINGS_EDIT,
+} ui_input_mode_t;
+```
+
+Ownership:
+- `ui_core` owns global mode transitions.
+- Selector parent owns collection selection in `SELECTOR_NAV`.
+- Active settings child instance owns `SETTINGS_NAV/EDIT` behavior only.
+
+Key transition rules:
+- Press+rotate: only valid in `PAGE_NAV`.
+- Rotate/tap while child open never triggers top-level page switch.
+- Exit child uses one clear gesture and checks `ui_page_settings_inst_can_exit()`.
+
+### Lab collections (first)
+- `Settings Test: Brightness` (int bar)
+- `Settings Test: HSV` (enum + bars)
+
+No FNL in selector during this lab.
+
+### Acceptance checklist before FNL migration
+
+1. Parent selector stable:
+- Can enter/exit child pages 100+ cycles without freeze.
+- No unintended horizontal page changes while child open.
+
+2. Child settings stability:
+- Rapid rotate in both directions on bars and enums is stable for 2+ minutes.
+- No watchdog triggers, no UI lockups, no stuck encoder mode.
+
+3. Lifecycle correctness:
+- Child open/close always pairs `init/show` with `hide/deinit` exactly once.
+- Reopening child does not reuse stale pointers or callbacks.
+
+4. Input arbitration:
+- Only one callback path active per mode.
+- Press+rotate is ignored while child open.
+
+5. Baseline protection:
+- Existing top-level FNL page remains behaviorally unchanged throughout lab phase.
+
+### FNL migration gate
+
+Only after checklist passes:
+- Move FNL into selector child flow using instance settings API.
+- Keep a temporary fallback to original top-level FNL page behind a compile-time flag for one validation cycle.
